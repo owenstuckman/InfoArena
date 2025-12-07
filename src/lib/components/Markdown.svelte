@@ -10,7 +10,7 @@
   // Configure marked options
   marked.setOptions({
     breaks: true, // Convert \n to <br>
-    gfm: true, // GitHub Flavored Markdown
+    gfm: true, // GitHub Flavored Markdown (includes tables)
   });
   
   $: {
@@ -143,21 +143,74 @@
     color: #fcd34d;
   }
   
+  /* Enhanced Table Styles */
+  .markdown-content :global(.table-wrapper) {
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid #334155;
+  }
+  
   .markdown-content :global(table) {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 1rem;
+    font-size: 0.9rem;
   }
   
-  .markdown-content :global(th),
-  .markdown-content :global(td) {
-    border: 1px solid #334155;
-    padding: 0.5rem 0.75rem;
-    text-align: left;
+  .markdown-content :global(thead) {
+    background: linear-gradient(to bottom, #1e293b, #0f172a);
   }
   
   .markdown-content :global(th) {
-    background: #1e293b;
+    border: 1px solid #334155;
+    padding: 0.75rem 1rem;
+    text-align: left;
     font-weight: 600;
+    color: #f1f5f9;
+    white-space: nowrap;
+  }
+  
+  .markdown-content :global(td) {
+    border: 1px solid #334155;
+    padding: 0.5rem 1rem;
+    text-align: left;
+    color: #cbd5e1;
+    vertical-align: top;
+  }
+  
+  .markdown-content :global(tbody tr:nth-child(odd)) {
+    background: #0f172a;
+  }
+  
+  .markdown-content :global(tbody tr:nth-child(even)) {
+    background: #1e293b;
+  }
+  
+  .markdown-content :global(tbody tr:hover) {
+    background: #334155;
+  }
+  
+  /* Medal colors for sports tables */
+  .markdown-content :global(td:first-child) {
+    font-weight: 500;
+  }
+  
+  /* Totals row */
+  .markdown-content :global(tbody tr:last-child) {
+    font-weight: 600;
+    background: #1e293b;
+  }
+  
+  /* Responsive tables */
+  @media (max-width: 640px) {
+    .markdown-content :global(table) {
+      font-size: 0.8rem;
+    }
+    
+    .markdown-content :global(th),
+    .markdown-content :global(td) {
+      padding: 0.375rem 0.5rem;
+    }
   }
 </style>

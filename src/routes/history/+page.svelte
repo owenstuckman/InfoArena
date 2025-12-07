@@ -41,22 +41,41 @@
   };
   let loading = true;
   let error: string | null = null;
+  let hasLoadedOnce = false;
 
   onMount(async () => {
     await authStore.init();
-    if ($isAuthenticated) {
-      await loadVoteHistory();
-    }
     loading = false;
   });
 
-  // React to auth changes
-  $: if (browser && $isAuthenticated && !loading) {
+  // React to auth changes - only load once user is fully authenticated
+  $: if (browser && $isAuthenticated && $currentUser && !hasLoadedOnce) {
+    hasLoadedOnce = true;
     loadVoteHistory();
+  }
+  
+  // Reset when user logs out
+  $: if (browser && !$isAuthenticated) {
+    hasLoadedOnce = false;
+    votes = [];
+    stats = {
+      totalVotes: 0,
+      sourcesCompared: new Set(),
+      favoriteSource: null,
+      avgTimeToVote: 0,
+      votesThisWeek: 0,
+    };
+  }
+
+  function handleAuthSuccess() {
+    // Reset flag so reactive statement can trigger
+    hasLoadedOnce = false;
   }
 
   async function loadVoteHistory() {
-    if (!isSupabaseConfigured || !$currentUser) return;
+    if (!isSupabaseConfigured || !$currentUser?.id) {
+      return;
+    }
 
     loading = true;
     error = null;
@@ -183,23 +202,27 @@
 </script>
 
 <svelte:head>
-  <title>Vote History - Knowledge Arena</title>
+  <title>Vote History - WikiArena</title>
 </svelte:head>
 
-<AuthModal bind:open={showAuthModal} on:success={loadVoteHistory} />
+<AuthModal bind:open={showAuthModal} on:success={handleAuthSuccess} />
 
 <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
   <div class="text-center mb-8">
-    <h1 class="text-3xl font-bold mb-2">📊 Vote History</h1>
-    <p class="text-slate-400">Track your comparisons and see your impact on the leaderboard</p>
+    <h1 class="text-2xl font-bold mb-2">Vote History</h1>
+    <p class="text-slate-400 text-sm">Track your comparisons and see your impact on the leaderboard</p>
   </div>
 
   {#if !$isAuthenticated}
     <!-- Sign In Prompt -->
     <div class="arena-card text-center py-12">
-      <div class="text-6xl mb-4">🔐</div>
-      <h2 class="text-2xl font-semibold mb-2">Sign in to view your history</h2>
-      <p class="text-slate-400 mb-6 max-w-md mx-auto">
+      <div class="w-12 h-12 mx-auto rounded-full bg-amber-500/10 flex items-center justify-center mb-4">
+        <svg class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+      </div>
+      <h2 class="text-xl font-semibold mb-2">Sign in to view your history</h2>
+      <p class="text-slate-400 text-sm mb-6 max-w-md mx-auto">
         Create an account to track your votes, see your preferences, and maintain your comparison history across devices.
       </p>
       <button
@@ -209,7 +232,7 @@
         Sign In or Create Account
       </button>
       
-      <p class="text-sm text-slate-500 mt-6">
+      <p class="text-xs text-slate-500 mt-6">
         You can still vote without an account - your votes count toward the global leaderboard!
       </p>
     </div>
@@ -222,9 +245,13 @@
 
   {:else if error}
     <div class="arena-card text-center py-12">
-      <div class="text-4xl mb-4">😕</div>
-      <h2 class="text-xl font-semibold mb-2">Failed to load history</h2>
-      <p class="text-slate-400 mb-4">{error}</p>
+      <div class="w-12 h-12 mx-auto rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+        <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+      </div>
+      <h2 class="text-lg font-semibold mb-2">Failed to load history</h2>
+      <p class="text-slate-400 text-sm mb-4">{error}</p>
       <button class="vote-btn vote-btn-secondary" on:click={loadVoteHistory}>
         Try Again
       </button>
@@ -254,10 +281,14 @@
     {#if stats.favoriteSource}
       <div class="arena-card mb-8">
         <div class="flex items-center gap-3">
-          <span class="text-2xl">❤️</span>
+          <div class="w-8 h-8 rounded-md bg-rose-500/10 flex items-center justify-center">
+            <svg class="w-4 h-4 text-rose-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+            </svg>
+          </div>
           <div>
-            <div class="text-sm text-slate-400">Your Favorite Source</div>
-            <div class="text-lg font-semibold">{stats.favoriteSource}</div>
+            <div class="text-xs text-slate-500">Your Favorite Source</div>
+            <div class="font-semibold">{stats.favoriteSource}</div>
           </div>
         </div>
       </div>
@@ -265,7 +296,19 @@
 
     <!-- Vote History List -->
     <div class="arena-card">
-      <h2 class="text-xl font-semibold mb-4">Recent Votes</h2>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-semibold">Recent Votes</h2>
+        <button 
+          class="text-sm text-slate-500 hover:text-slate-300 flex items-center gap-1"
+          on:click={() => { hasLoadedOnce = false; loadVoteHistory(); }}
+          disabled={loading}
+        >
+          <svg class="w-4 h-4 {loading ? 'animate-spin' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Refresh
+        </button>
+      </div>
       
       {#if votes.length === 0}
         <div class="text-center py-8 text-slate-400">

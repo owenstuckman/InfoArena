@@ -13,13 +13,8 @@
     leaderboardStore.unsubscribeRealtime();
   });
 
-  function getRankEmoji(rank: number): string {
-    switch (rank) {
-      case 1: return '🥇';
-      case 2: return '🥈';
-      case 3: return '🥉';
-      default: return `#${rank}`;
-    }
+  function getRankDisplay(rank: number): string {
+    return `#${rank}`;
   }
 
   function getConfidenceInterval(rating: number, rd: number): string {
@@ -38,14 +33,14 @@
 </script>
 
 <svelte:head>
-  <title>Leaderboard - Knowledge Arena</title>
+  <title>Leaderboard - WikiArena</title>
 </svelte:head>
 
 <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
   <!-- Header -->
   <div class="text-center mb-8">
-    <h1 class="text-3xl font-bold mb-2">🏆 Leaderboard</h1>
-    <p class="text-slate-400">Global rankings based on community votes</p>
+    <h1 class="text-2xl font-bold mb-2">Leaderboard</h1>
+    <p class="text-slate-400 text-sm">Global rankings based on community votes</p>
     {#if $leaderboardStore.lastUpdated}
       <p class="text-xs text-slate-500 mt-2">
         Last updated: {$leaderboardStore.lastUpdated.toLocaleTimeString()}
@@ -78,9 +73,13 @@
   <!-- Error State -->
   {:else if $leaderboardStore.error}
     <div class="arena-card text-center">
-      <div class="text-4xl mb-4">😵</div>
-      <h2 class="text-xl font-semibold mb-2">Failed to load leaderboard</h2>
-      <p class="text-slate-400 mb-6">{$leaderboardStore.error}</p>
+      <div class="w-12 h-12 mx-auto rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+        <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+      </div>
+      <h2 class="text-lg font-semibold mb-2">Failed to load leaderboard</h2>
+      <p class="text-slate-400 text-sm mb-6">{$leaderboardStore.error}</p>
       <button 
         class="vote-btn vote-btn-primary"
         on:click={() => leaderboardStore.load()}
@@ -100,11 +99,7 @@
         >
           <!-- Rank -->
           <div class="flex-shrink-0 w-12 text-center">
-            {#if rank <= 3}
-              <span class="text-2xl">{getRankEmoji(rank)}</span>
-            {:else}
-              <span class="text-lg font-bold text-slate-500">#{rank}</span>
-            {/if}
+            <span class="text-lg font-bold {rank === 1 ? 'text-amber-400' : rank === 2 ? 'text-slate-300' : rank === 3 ? 'text-amber-600' : 'text-slate-500'}">#{rank}</span>
           </div>
 
           <!-- Source Info -->
@@ -158,9 +153,13 @@
     <!-- Empty State -->
     {#if $leaderboardStore.entries.length === 0}
       <div class="arena-card text-center py-12">
-        <div class="text-4xl mb-4">🏜️</div>
-        <h2 class="text-xl font-semibold mb-2">No rankings yet</h2>
-        <p class="text-slate-400 mb-6">Be the first to vote and establish the rankings!</p>
+        <div class="w-12 h-12 mx-auto rounded-full bg-slate-800 flex items-center justify-center mb-4">
+          <svg class="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+          </svg>
+        </div>
+        <h2 class="text-lg font-semibold mb-2">No rankings yet</h2>
+        <p class="text-slate-400 text-sm mb-6">Be the first to vote and establish the rankings!</p>
         <a href="/arena" class="vote-btn vote-btn-primary">
           Enter the Arena
         </a>

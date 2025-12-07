@@ -147,33 +147,41 @@
     contentExpanded = { left: false, right: false };
 
     try {
-      // Select two random sources
+      // Shuffle sources and try to find two with valid content
       const shuffled = [...sources].sort(() => Math.random() - 0.5);
-      const sourceA = shuffled[0];
-      const sourceB = shuffled[1];
+      const validSources: { source: typeof sources[0]; content: SourceContent }[] = [];
+      
+      // Try to fetch content from each source until we have 2 valid ones
+      for (const source of shuffled) {
+        if (validSources.length >= 2) break;
+        
+        try {
+          const content = await fetchContentFromSource(topic, source.slug as SourceSlug);
+          if (content && content.content && content.content.length > 100) {
+            validSources.push({ source, content });
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch from ${source.name}:`, e);
+        }
+      }
 
-      // Fetch content from both sources in parallel
-      const [contentA, contentB] = await Promise.all([
-        fetchContentFromSource(topic, sourceA.slug as SourceSlug),
-        fetchContentFromSource(topic, sourceB.slug as SourceSlug),
-      ]);
-
-      if (!contentA || !contentB) {
-        throw new Error('Failed to fetch content from one or more sources');
+      if (validSources.length < 2) {
+        throw new Error('Could not find enough sources with content for this topic. Try a different topic.');
       }
 
       // Randomize positions
       const aOnLeft = Math.random() > 0.5;
+      const [first, second] = validSources;
       
       leftDisplay = {
-        source: aOnLeft ? sourceA : sourceB,
-        content: aOnLeft ? contentA : contentB,
+        source: aOnLeft ? first.source : second.source,
+        content: aOnLeft ? first.content : second.content,
         position: 'left',
       };
       
       rightDisplay = {
-        source: aOnLeft ? sourceB : sourceA,
-        content: aOnLeft ? contentB : contentA,
+        source: aOnLeft ? second.source : first.source,
+        content: aOnLeft ? second.content : first.content,
         position: 'right',
       };
 
@@ -291,7 +299,7 @@
 </script>
 
 <svelte:head>
-  <title>Arena - Knowledge Arena</title>
+  <title>Arena - WikiArena</title>
 </svelte:head>
 
 <AuthModal bind:open={showAuthModal} />
@@ -299,8 +307,8 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
   <!-- Header -->
   <div class="text-center mb-8">
-    <h1 class="text-3xl font-bold mb-2">⚔️ The Arena</h1>
-    <p class="text-slate-400">Compare knowledge sources head-to-head in a blind test</p>
+    <h1 class="text-2xl font-bold mb-2">The Arena</h1>
+    <p class="text-slate-400 text-sm">Compare knowledge sources head-to-head in a blind test</p>
     
     <!-- Auth Status -->
     <div class="mt-4 flex items-center justify-center gap-4">
@@ -379,7 +387,7 @@
 
         <!-- Random Button -->
         <button
-          class="w-full py-4 px-6 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-semibold rounded-xl hover:from-amber-400 hover:to-orange-400 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+          class="w-full py-3 px-6 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-semibold rounded-xl hover:from-amber-400 hover:to-orange-400 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           on:click={loadRandomTopic}
           disabled={isLoadingRandomTopic}
         >
@@ -389,7 +397,7 @@
               Finding a topic...
             </span>
           {:else}
-            🎲 Random Topic
+            Random Topic
           {/if}
         </button>
         
@@ -511,21 +519,21 @@
           class="vote-btn vote-btn-primary w-full sm:w-auto"
           on:click={() => submitVote('a')}
         >
-          👈 A is Better
+          A is Better
         </button>
         
         <button
           class="vote-btn vote-btn-secondary w-full sm:w-auto"
           on:click={() => submitVote('tie')}
         >
-          🤝 It's a Tie
+          It's a Tie
         </button>
         
         <button
           class="vote-btn vote-btn-primary w-full sm:w-auto"
           on:click={() => submitVote('b')}
         >
-          B is Better 👉
+          B is Better
         </button>
       </div>
 
@@ -534,7 +542,7 @@
           class="text-sm text-slate-500 hover:text-slate-300 transition-colors"
           on:click={() => submitVote('both_bad')}
         >
-          😕 Both are bad
+          Both are bad
         </button>
       </div>
     </div>
@@ -645,15 +653,9 @@
         <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
           <button
             class="vote-btn vote-btn-primary"
-            on:click={() => loadComparison(currentTopic)}
-          >
-            Compare Again
-          </button>
-          <button
-            class="vote-btn vote-btn-secondary"
             on:click={startNewComparison}
           >
-            New Topic
+            New Comparison
           </button>
           <a href="/leaderboard" class="vote-btn vote-btn-secondary">
             View Leaderboard
@@ -671,9 +673,13 @@
   {#if error}
     <div class="max-w-md mx-auto mt-8">
       <div class="arena-card text-center border-red-500/20">
-        <div class="text-4xl mb-4">😵</div>
-        <h2 class="text-xl font-semibold mb-2">Something went wrong</h2>
-        <p class="text-slate-400 mb-6">{error}</p>
+        <div class="w-12 h-12 mx-auto rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+          <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <h2 class="text-lg font-semibold mb-2">Something went wrong</h2>
+        <p class="text-slate-400 text-sm mb-6">{error}</p>
         <button class="vote-btn vote-btn-primary" on:click={startNewComparison}>
           Try Again
         </button>

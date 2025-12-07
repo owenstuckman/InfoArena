@@ -165,7 +165,7 @@ async function fetchWikipediaWithExtracts(title: string): Promise<WikipediaArtic
 }
 
 /**
- * Convert Wikipedia HTML to clean markdown text
+ * Convert Wikipedia HTML to clean markdown text with proper table support
  */
 function convertWikipediaHtmlToMarkdown(title: string, html: string): string {
   let content = html;
@@ -183,10 +183,12 @@ function convertWikipediaHtmlToMarkdown(title: string, html: string): string {
   // Remove edit links
   content = content.replace(/<span class="mw-editsection"[\s\S]*?<\/span>/gi, '');
   
-  // Remove navigation boxes, infoboxes, and sidebars
+  // Remove navigation boxes, infoboxes, and sidebars (but NOT data tables)
   content = content.replace(/<table[^>]*class="[^"]*infobox[^"]*"[^>]*>[\s\S]*?<\/table>/gi, '');
   content = content.replace(/<table[^>]*class="[^"]*navbox[^"]*"[^>]*>[\s\S]*?<\/table>/gi, '');
   content = content.replace(/<table[^>]*class="[^"]*sidebar[^"]*"[^>]*>[\s\S]*?<\/table>/gi, '');
+  content = content.replace(/<table[^>]*class="[^"]*ambox[^"]*"[^>]*>[\s\S]*?<\/table>/gi, '');
+  content = content.replace(/<table[^>]*class="[^"]*metadata[^"]*"[^>]*>[\s\S]*?<\/table>/gi, '');
   content = content.replace(/<div[^>]*class="[^"]*navbox[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
   content = content.replace(/<div[^>]*class="[^"]*thumb[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
   
@@ -201,6 +203,9 @@ function convertWikipediaHtmlToMarkdown(title: string, html: string): string {
   content = content.replace(/<h2[^>]*><span[^>]*id="Further_reading"[\s\S]*$/gi, '');
   content = content.replace(/<h2[^>]*><span[^>]*id="Notes"[\s\S]*$/gi, '');
   content = content.replace(/<h2[^>]*><span[^>]*id="Bibliography"[\s\S]*$/gi, '');
+  
+  // Convert tables to markdown BEFORE other conversions
+  content = convertHtmlTablesToMarkdown(content);
   
   // Convert headings
   content = content.replace(/<h2[^>]*><span[^>]*>([^<]*)<\/span><\/h2>/gi, '\n\n## $1\n\n');
@@ -228,18 +233,11 @@ function convertWikipediaHtmlToMarkdown(title: string, html: string): string {
   // Convert links - just keep the text
   content = content.replace(/<a[^>]*>([^<]*)<\/a>/gi, '$1');
   
-  // Remove remaining HTML tags
-  content = content.replace(/<[^>]+>/g, '');
+  // Remove remaining HTML tags (but preserve markdown table structure)
+  content = content.replace(/<(?![\|])[^>]+>/g, '');
   
   // Decode HTML entities
-  content = content.replace(/&nbsp;/g, ' ');
-  content = content.replace(/&amp;/g, '&');
-  content = content.replace(/&lt;/g, '<');
-  content = content.replace(/&gt;/g, '>');
-  content = content.replace(/&quot;/g, '"');
-  content = content.replace(/&#39;/g, "'");
-  content = content.replace(/&ndash;/g, '–');
-  content = content.replace(/&mdash;/g, '—');
+  content = decodeHtmlEntities(content);
   
   // Clean up whitespace
   content = content.replace(/\n{4,}/g, '\n\n\n');
@@ -251,6 +249,149 @@ function convertWikipediaHtmlToMarkdown(title: string, html: string): string {
   content = `# ${title}\n\n${content.trim()}`;
   
   return content;
+}
+
+/**
+ * Convert HTML tables to markdown tables
+ */
+function convertHtmlTablesToMarkdown(html: string): string {
+  let content = html;
+  
+  // Find all tables and convert them
+  const tableRegex = /<table[^>]*class="[^"]*wikitable[^"]*"[^>]*>([\s\S]*?)<\/table>/gi;
+  const genericTableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi;
+  
+  // Process wikitables first (these are data tables we want to keep)
+  content = content.replace(tableRegex, (match, tableContent) => {
+    return convertSingleTableToMarkdown(tableContent);
+  });
+  
+  // Process remaining tables (be more selective)
+  content = content.replace(genericTableRegex, (match, tableContent) => {
+    // Check if this looks like a data table (has th or multiple td)
+    const hasTh = /<th[^>]*>/i.test(tableContent);
+    const tdCount = (tableContent.match(/<td[^>]*>/gi) || []).length;
+    
+    if (hasTh || tdCount >= 4) {
+      return convertSingleTableToMarkdown(tableContent);
+    }
+    // Otherwise, just extract text
+    return tableContent.replace(/<[^>]+>/g, ' ');
+  });
+  
+  return content;
+}
+
+/**
+ * Convert a single HTML table to markdown format
+ */
+function convertSingleTableToMarkdown(tableHtml: string): string {
+  const rows: string[][] = [];
+  let hasHeader = false;
+  
+  // Extract rows
+  const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let rowMatch;
+  
+  while ((rowMatch = rowRegex.exec(tableHtml)) !== null) {
+    const rowContent = rowMatch[1];
+    const cells: string[] = [];
+    
+    // Check for header cells
+    const headerRegex = /<th[^>]*>([\s\S]*?)<\/th>/gi;
+    const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    
+    let cellMatch;
+    let isHeaderRow = false;
+    
+    // First try headers
+    while ((cellMatch = headerRegex.exec(rowContent)) !== null) {
+      isHeaderRow = true;
+      hasHeader = true;
+      const cellText = extractCellText(cellMatch[1]);
+      cells.push(cellText);
+    }
+    
+    // Then try regular cells
+    if (cells.length === 0) {
+      while ((cellMatch = cellRegex.exec(rowContent)) !== null) {
+        const cellText = extractCellText(cellMatch[1]);
+        cells.push(cellText);
+      }
+    }
+    
+    if (cells.length > 0) {
+      rows.push(cells);
+      
+      // Add separator after header row
+      if (isHeaderRow && rows.length === 1) {
+        rows.push(cells.map(() => '---'));
+      }
+    }
+  }
+  
+  // If no header was found, add a generic one based on first row
+  if (!hasHeader && rows.length > 0) {
+    const numCols = rows[0].length;
+    const headers = rows[0].map((_, i) => `Column ${i + 1}`);
+    rows.unshift(['---'].concat(Array(numCols - 1).fill('---')));
+    rows.unshift(headers);
+  }
+  
+  // Build markdown table
+  if (rows.length < 2) return '';
+  
+  const mdTable = rows.map(row => {
+    // Ensure consistent column count
+    const maxCols = Math.max(...rows.map(r => r.length));
+    while (row.length < maxCols) {
+      row.push('');
+    }
+    return '| ' + row.join(' | ') + ' |';
+  }).join('\n');
+  
+  return '\n\n' + mdTable + '\n\n';
+}
+
+/**
+ * Extract clean text from a table cell
+ */
+function extractCellText(cellHtml: string): string {
+  let text = cellHtml;
+  
+  // Remove nested tags but keep their content
+  text = text.replace(/<br\s*\/?>/gi, ' ');
+  text = text.replace(/<[^>]+>/g, '');
+  
+  // Decode entities
+  text = decodeHtmlEntities(text);
+  
+  // Clean whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+  
+  // Escape pipe characters
+  text = text.replace(/\|/g, '\\|');
+  
+  return text;
+}
+
+/**
+ * Decode HTML entities
+ */
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&ndash;/g, '–')
+    .replace(/&mdash;/g, '—')
+    .replace(/&#160;/g, ' ')
+    .replace(/&#8211;/g, '–')
+    .replace(/&#8212;/g, '—')
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
 }
 
 /**
@@ -691,12 +832,15 @@ export async function fetchContentFromAllSources(
 // ============================================
 
 /**
- * Source logo URLs
+ * Source logo URLs - using reliable CDN/wiki sources
  */
 export const SOURCE_LOGOS: Record<SourceSlug, string> = {
-  wikipedia: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/103px-Wikipedia-logo-v2.svg.png',
-  grokipedia: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/X.ai_logo.svg/200px-X.ai_logo.svg.png',
-  britannica: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Britannica_logo.svg/200px-Britannica_logo.svg.png',
+  // Wikipedia puzzle globe logo
+  wikipedia: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Wikipedia-logo-v2-en.svg/200px-Wikipedia-logo-v2-en.svg.png',
+  // xAI logo (stylized X)
+  grokipedia: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/32/X.ai_logo.png/220px-X.ai_logo.png',
+  // Britannica thistle logo
+  britannica: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/50/Encyclop%C3%A6dia_Britannica_thistle.svg/100px-Encyclop%C3%A6dia_Britannica_thistle.svg.png',
 };
 
 /**
