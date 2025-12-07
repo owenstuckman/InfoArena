@@ -99,56 +99,6 @@ Rating-wise, ties cause smaller changes than wins or losses, and they pull both 
     }
   ];
   
-  const qualityFAQ: FAQItem[] = [
-    {
-      question: "What is 'Unique Value'?",
-      answer: `When you compare or blend multiple encyclopedia sources, "Unique Value" tells you how much distinctive information each source contributes that the others don't have.
-
-<strong>How it works:</strong> We analyze what information is unique to each source vs. what's repeated across all of them. A source with high Unique Value adds something special that you wouldn't get from the others alone.
-
-<strong>Example:</strong> If Wikipedia and Britannica both explain the basics of "Photosynthesis", but Britannica includes detailed historical context that Wikipedia doesn't, Britannica gets a higher Unique Value score for that topic.
-
-<strong>Technical note:</strong> This is based on Shapley values from game theory — a Nobel Prize-winning method for fairly measuring individual contributions in a group.`
-    },
-    {
-      question: "How do you calculate the quality scores?",
-      answer: `We analyze content across five dimensions. All sources start with the same base scores — the differences come from what's actually in the content:
-
-<strong>Accuracy (30%)</strong> — Starts at 70% for all sources. Gets bonuses for: having citations (+15% max), having good structure with headings (+10% max). Well-sourced, organized content scores higher.
-
-<strong>Depth (25%)</strong> — Based on word count (up to 2000 words = 100%) and structure (headings + paragraphs). Longer, well-organized articles score higher.
-
-<strong>Readability (20%)</strong> — Measures sentence length. Optimal is 15-20 words per sentence. Very long or very short sentences reduce the score.
-
-<strong>Objectivity (15%)</strong> — Counts opinion words like "best", "terrible", "obviously", "absolutely". More opinion words = lower score.
-
-<strong>Citations (10%)</strong> — Counts links relative to content length. Expects roughly 1 link per 200 words for well-cited content.
-
-These are heuristics, not perfect science. The real rankings come from user voting.`
-    },
-    {
-      question: "What's the 'Expected Value' number?",
-      answer: `It's a prediction of how well a source should do, combining:
-
-• The quality score we calculated for this specific article (40%)
-• The source's overall Glicko-2 rating from all votes (35%)
-• Their historical win rate (25%)
-
-If a source's quality score is way higher than expected, that article is probably better than their average. If it's lower, this particular article might not be their best work.`
-    },
-    {
-      question: "Why use humans instead of AI to judge quality?",
-      answer: `AI judgment has issues:
-
-<strong>It's biased.</strong> AI models are trained on internet data, which includes a lot of Wikipedia. They might unfairly prefer sources they've seen more of.
-
-<strong>"Quality" is subjective.</strong> There's no objective definition of what makes knowledge "better." Only humans can decide what they actually find useful.
-
-<strong>It can be gamed.</strong> If AI judged quality, sources could optimize for what the AI likes instead of what humans need.
-
-So we use AI for analysis (calculating metrics) but humans for the actual judgment (voting).`
-    }
-  ];
   
   const generalFAQ: FAQItem[] = [
     {
@@ -203,12 +153,6 @@ We're always looking at adding more based on what people want to compare.`
       on:click={() => openSection = 'fairness'}
     >
       Fairness
-    </button>
-    <button
-      class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {openSection === 'quality' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200 border border-slate-700/50'}"
-      on:click={() => openSection = 'quality'}
-    >
-      Quality Metrics
     </button>
     <button
       class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {openSection === 'general' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200 border border-slate-700/50'}"
