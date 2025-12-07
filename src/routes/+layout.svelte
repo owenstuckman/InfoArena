@@ -19,6 +19,7 @@
     { href: '/leaderboard', label: 'Leaderboard' },
     { href: '/blend', label: 'Blender' },
     { href: '/history', label: 'History' },
+    { href: '/faq', label: 'FAQ' },
   ];
   
   onMount(async () => {
@@ -38,9 +39,11 @@
       <div class="flex h-14 items-center justify-between">
         <!-- Logo -->
         <a href="/" class="flex items-center gap-2 group">
-          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-bold text-slate-900 text-sm shadow-lg shadow-amber-500/20">
-            W
-          </div>
+          <img 
+            src="/logo.png" 
+            alt="WikiArena" 
+            class="w-9 h-9 object-contain"
+          />
           <span class="text-lg font-semibold text-slate-100">
             WikiArena
           </span>

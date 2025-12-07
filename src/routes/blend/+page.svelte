@@ -13,6 +13,14 @@
     type SourceSlug,
     type SourceContent 
   } from '$lib/services/content';
+  import {
+    assessQuality,
+    formatQualityScore,
+    formatShapleyValue,
+    getQualityTier,
+    type QualityAssessment,
+    type SourceQuality
+  } from '$lib/services/shapley';
   import type { Source, BlendConfig } from '$lib/types/database';
 
   // Constants
@@ -67,6 +75,10 @@
   // User preferences from vote history
   let userPreferences: Record<string, { wins: number; total: number; winRate: number }> = {};
   let usePreferenceWeights = false;
+  
+  // Quality assessment
+  let qualityAssessment: QualityAssessment | null = null;
+  let sourceQualities: Record<string, SourceQuality> = {};
 
   // Helpers
   function getLogo(slug: string): string {
@@ -393,6 +405,34 @@
 
       const results = await Promise.all(contentPromises);
       
+      // Calculate quality assessment with Shapley values
+      const validResults = results.filter(r => r.content !== null);
+      if (validResults.length > 0) {
+        const globalRatings: Record<string, { rating: number; winRate: number }> = {};
+        for (const source of sources) {
+          const winRate = source.total_matches > 0 
+            ? (source.total_wins / source.total_matches) * 100 
+            : 50;
+          globalRatings[source.slug] = { rating: source.rating, winRate };
+        }
+        
+        qualityAssessment = assessQuality(
+          validResults.map(r => ({
+            sourceId: r.source.id,
+            sourceName: r.source.name,
+            sourceSlug: r.source.slug,
+            content: r.content!.content,
+          })),
+          globalRatings
+        );
+        
+        // Map to sourceQualities for easy lookup
+        sourceQualities = {};
+        for (const sq of qualityAssessment.sources) {
+          sourceQualities[sq.sourceId] = sq;
+        }
+      }
+      
       // Phase 2: Check if compare mode
       if (showCompareMode || selectedPreset.includes('Compare')) {
         loadingPhase = 'Comparing sources...';
@@ -431,11 +471,32 @@
     let output = `# Source Comparison: ${query}\n\n`;
     output += `*Comparing ${validContents.length} knowledge sources side by side.*\n\n`;
     
+    // Add quality overview if available
+    if (qualityAssessment) {
+      output += `## Quality Analysis\n\n`;
+      output += `| Source | Quality | Shapley Value | Expected | Accuracy | Readability |\n`;
+      output += `|--------|---------|---------------|----------|----------|-------------|\n`;
+      
+      for (const sc of validContents) {
+        const q = sourceQualities[sc.source.id];
+        if (q) {
+          output += `| ${sc.source.name} | ${formatQualityScore(q.overallScore)} | ${formatShapleyValue(q.shapleyValue)} | ${formatQualityScore(q.expectedValue)} | ${formatQualityScore(q.metrics.accuracy)} | ${formatQualityScore(q.metrics.readability)} |\n`;
+        }
+      }
+      
+      output += `\n*Combined Coalition Value: ${formatQualityScore(qualityAssessment.coalitionValue)}*\n\n`;
+    }
+    
     // Add each source's content
     for (const sc of validContents) {
       const weight = Math.round(weights[sc.source.id] * 100);
+      const q = sourceQualities[sc.source.id];
       output += `---\n\n## ${sc.source.name}\n`;
-      output += `*Weight: ${weight}%*\n\n`;
+      output += `*Weight: ${weight}%`;
+      if (q) {
+        output += ` | Quality: ${formatQualityScore(q.overallScore)} | Shapley: ${formatShapleyValue(q.shapleyValue)}`;
+      }
+      output += `*\n\n`;
       
       // Extract first 1500 chars of content
       const content = sc.content!.content;
@@ -824,8 +885,9 @@ Remember: Do NOT mention source names. Write as if this is original content.`;
         </select>
         
         <div class="mt-3">
-          <label class="text-xs text-slate-500 mb-1 block">Custom instructions</label>
+          <label for="custom-instructions" class="text-xs text-slate-500 mb-1 block">Custom instructions</label>
           <textarea
+            id="custom-instructions"
             bind:value={customPrompt}
             placeholder="e.g., 'Focus on recent developments'..."
             class="w-full h-16 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg
@@ -1007,15 +1069,64 @@ Remember: Do NOT mention source names. Write as if this is original content.`;
             </div>
             
             {#if showSourceContent}
+              <!-- Quality Assessment Summary -->
+              {#if qualityAssessment && Object.keys(sourceQualities).length > 0}
+                <div class="mb-4 p-4 rounded-lg bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/30">
+                  <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-medium text-slate-300">Quality Analysis (Shapley Values)</h3>
+                    <div class="text-xs text-slate-500">
+                      Coalition: <span class="text-amber-400 font-semibold">{formatQualityScore(qualityAssessment.coalitionValue)}</span>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {#each Object.entries(sourceQualities) as [sourceId, quality]}
+                      {@const source = sources.find(s => s.id === sourceId)}
+                      {@const tier = getQualityTier(quality.overallScore)}
+                      <div class="p-3 rounded-lg bg-slate-900/50 border border-slate-700/30">
+                        <div class="flex items-center gap-2 mb-2">
+                          <img src={getLogo(source?.slug || '')} alt="" class="w-4 h-4 object-contain" />
+                          <span class="text-xs font-medium {getColor(source?.slug || '')}">{source?.name}</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <div class="text-slate-500">Quality</div>
+                            <div class="font-semibold {tier.color}">{formatQualityScore(quality.overallScore)}</div>
+                          </div>
+                          <div>
+                            <div class="text-slate-500">Shapley</div>
+                            <div class="font-semibold {quality.shapleyValue >= 0 ? 'text-emerald-400' : 'text-red-400'}">{formatShapleyValue(quality.shapleyValue)}</div>
+                          </div>
+                          <div>
+                            <div class="text-slate-500">Expected</div>
+                            <div class="font-semibold text-amber-400">{formatQualityScore(quality.expectedValue)}</div>
+                          </div>
+                          <div>
+                            <div class="text-slate-500">Accuracy</div>
+                            <div class="font-semibold text-slate-300">{formatQualityScore(quality.metrics.accuracy)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            
               <div class="grid grid-cols-1 gap-4" class:md:grid-cols-2={Object.keys(fetchedContents).length === 2} class:md:grid-cols-3={Object.keys(fetchedContents).length >= 3}>
                 {#each Object.entries(fetchedContents) as [sourceId, content]}
                   {@const source = sources.find(s => s.id === sourceId)}
+                  {@const quality = sourceQualities[sourceId]}
                   <div class="p-4 rounded-lg bg-slate-800/30 border border-slate-700/30">
                     <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-700/30">
                       <img src={getLogo(source?.slug || '')} alt="" class="w-5 h-5 object-contain" />
                       <span class="font-medium text-sm {getColor(source?.slug || '')}">{source?.name || 'Unknown'}</span>
                       <span class="text-xs text-amber-400 ml-auto">{Math.round(weights[sourceId] * 100)}%</span>
                     </div>
+                    {#if quality}
+                      <div class="flex items-center gap-3 mb-3 text-xs">
+                        <span class="text-slate-500">Quality: <span class="{getQualityTier(quality.overallScore).color}">{formatQualityScore(quality.overallScore)}</span></span>
+                        <span class="text-slate-500">Shapley: <span class="{quality.shapleyValue >= 0 ? 'text-emerald-400' : 'text-red-400'}">{formatShapleyValue(quality.shapleyValue)}</span></span>
+                      </div>
+                    {/if}
                     <div class="text-xs text-slate-400 max-h-48 overflow-y-auto scrollbar-thin">
                       <Markdown content={content.content.substring(0, 1500) + (content.content.length > 1500 ? '...' : '')} />
                     </div>

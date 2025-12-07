@@ -14,3 +14,6 @@
     - [ ] captcha in supabase 
     - [ ] better rate limits 
 - [ ] add in some oauth 
+
+
+- [ ] add in an images/ non images way and filter between (grokipedia does not have images )

@@ -17,11 +17,15 @@
     gfm: true, // GitHub Flavored Markdown (includes tables)
   });
   
-  // Custom renderer to open links in new tabs
+  // Custom renderer
   const renderer = new marked.Renderer();
   
+  // Override table rendering to wrap in scrollable container
+  renderer.table = function(header: string, body: string): string {
+    return `<div class="table-wrapper"><table><thead>${header}</thead><tbody>${body}</tbody></table></div>`;
+  };
+  
   // Override link rendering
-  const originalLink = renderer.link.bind(renderer);
   renderer.link = function(href: string | null, title: string | null | undefined, text: string) {
     if (!href) return text;
     
@@ -36,9 +40,42 @@
   
   marked.use({ renderer });
   
+  // Pre-process content to fix common markdown table issues
+  function preprocessMarkdown(text: string): string {
+    // Ensure there's a blank line before tables (required by some parsers)
+    let processed = text;
+    
+    // Find table headers (lines with |) and ensure blank line before
+    processed = processed.replace(/([^\n])\n(\|[^\n]+\|)\n(\|[-:| ]+\|)/g, '$1\n\n$2\n$3');
+    
+    // Fix tables that have no proper header separator
+    // Look for lines with | that are followed by content but no separator
+    const lines = processed.split('\n');
+    const result: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const nextLine = lines[i + 1];
+      
+      result.push(line);
+      
+      // If this line looks like a table header (has |) and next line doesn't have separator
+      if (line.includes('|') && nextLine && nextLine.includes('|') && !nextLine.match(/^\|?[\s-:|]+\|?$/)) {
+        // Check if this might be a header row without separator
+        const cellCount = (line.match(/\|/g) || []).length;
+        if (cellCount >= 2 && !lines[i + 1]?.match(/^[\s]*\|[\s-:|]+/)) {
+          // This looks like it might need a separator - but only add if next line doesn't look like one
+        }
+      }
+    }
+    
+    return processed;
+  }
+  
   $: {
     try {
-      renderedHtml = marked.parse(content) as string;
+      const processedContent = preprocessMarkdown(content);
+      renderedHtml = marked.parse(processedContent) as string;
     } catch (e) {
       console.error('Markdown parsing error:', e);
       renderedHtml = content.replace(/\n/g, '<br>');
