@@ -1,6 +1,9 @@
 /**
  * Knowledge Content Service
  * Fetches content from Wikipedia, Grokipedia (xAI), and Encyclopedia Britannica
+ * 
+ * IMPORTANT: All content is sanitized to remove source self-references
+ * to ensure blind comparisons are truly blind.
  */
 
 // ============================================
@@ -38,7 +41,7 @@ export async function fetchWikipediaSummary(title: string): Promise<WikipediaArt
     const data = await response.json();
     return {
       title: data.title,
-      extract: data.extract || '',
+      extract: sanitizeContent(data.extract || '', 'wikipedia'),
       url: data.content_urls?.desktop?.page || '',
       thumbnail: data.thumbnail?.source,
     };
@@ -49,22 +52,75 @@ export async function fetchWikipediaSummary(title: string): Promise<WikipediaArt
 }
 
 /**
- * Fetch full Wikipedia article content using TextExtracts API
- * This provides cleaner, plaintext content with proper formatting
+ * Fetch full Wikipedia article content using Parse API
+ * This returns the complete article, not just a summary
  */
 export async function fetchWikipediaFullArticle(title: string): Promise<WikipediaArticle | null> {
   try {
     const encoded = encodeURIComponent(title);
     
-    // Use the TextExtracts API for cleaner content
+    // Use Parse API to get full article HTML
+    const params = new URLSearchParams({
+      action: 'parse',
+      page: title,
+      prop: 'text|sections',
+      format: 'json',
+      origin: '*',
+      disableeditsection: 'true',
+      disabletoc: 'true',
+    });
+    
+    const response = await fetch(`${WIKIPEDIA_ACTION_API}?${params}`);
+    
+    if (!response.ok) {
+      console.error('Wikipedia Parse API error:', response.status);
+      return fetchWikipediaWithExtracts(title);
+    }
+    
+    const data = await response.json();
+    
+    if (data.error) {
+      console.error('Wikipedia Parse API error:', data.error);
+      return fetchWikipediaWithExtracts(title);
+    }
+    
+    const html = data.parse?.text?.['*'];
+    const pageTitle = data.parse?.title || title;
+    
+    if (!html) {
+      return fetchWikipediaWithExtracts(title);
+    }
+    
+    // Convert HTML to clean markdown-like text
+    const content = convertWikipediaHtmlToMarkdown(pageTitle, html);
+    const sanitizedContent = sanitizeContent(content, 'wikipedia');
+    
+    return {
+      title: pageTitle,
+      extract: sanitizedContent.substring(0, 500),
+      fullContent: sanitizedContent,
+      url: `https://en.wikipedia.org/wiki/${encoded}`,
+    };
+  } catch (e) {
+    console.error('Wikipedia full article error:', e);
+    return fetchWikipediaWithExtracts(title);
+  }
+}
+
+/**
+ * Fallback: Fetch Wikipedia using TextExtracts API (limited but more reliable)
+ */
+async function fetchWikipediaWithExtracts(title: string): Promise<WikipediaArticle | null> {
+  try {
+    const encoded = encodeURIComponent(title);
+    
     const params = new URLSearchParams({
       action: 'query',
       titles: title,
       prop: 'extracts|pageimages|info',
-      exintro: '0', // Get full article, not just intro
-      explaintext: '1', // Get plaintext
-      exsectionformat: 'wiki', // Include section headers
-      exchars: '15000', // Get up to 15000 chars
+      exintro: '0',
+      explaintext: '1',
+      exsectionformat: 'wiki',
       piprop: 'thumbnail',
       pithumbsize: '400',
       inprop: 'url',
@@ -85,7 +141,6 @@ export async function fetchWikipediaFullArticle(title: string): Promise<Wikipedi
       return fetchWikipediaSummary(title);
     }
     
-    // Get the first (and usually only) page
     const pageId = Object.keys(pages)[0];
     const page = pages[pageId];
     
@@ -93,40 +148,123 @@ export async function fetchWikipediaFullArticle(title: string): Promise<Wikipedi
       return fetchWikipediaSummary(title);
     }
     
-    // Format the content with proper markdown
     const formattedContent = formatWikipediaContent(page.title, page.extract);
+    const sanitizedContent = sanitizeContent(formattedContent, 'wikipedia');
     
     return {
       title: page.title,
-      extract: page.extract.substring(0, 500),
-      fullContent: formattedContent,
+      extract: sanitizeContent(page.extract.substring(0, 500), 'wikipedia'),
+      fullContent: sanitizedContent,
       url: page.fullurl || `https://en.wikipedia.org/wiki/${encoded}`,
       thumbnail: page.thumbnail?.source,
     };
   } catch (e) {
-    console.error('Wikipedia full article error:', e);
+    console.error('Wikipedia extracts error:', e);
     return fetchWikipediaSummary(title);
   }
 }
 
 /**
- * Format Wikipedia plaintext content into proper markdown
+ * Convert Wikipedia HTML to clean markdown text
+ */
+function convertWikipediaHtmlToMarkdown(title: string, html: string): string {
+  let content = html;
+  
+  // Remove script and style tags
+  content = content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+  content = content.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+  
+  // Remove reference tags and citations
+  content = content.replace(/<sup[^>]*class="reference"[^>]*>[\s\S]*?<\/sup>/gi, '');
+  content = content.replace(/\[\d+\]/g, '');
+  content = content.replace(/\[citation needed\]/gi, '');
+  content = content.replace(/\[clarification needed\]/gi, '');
+  
+  // Remove edit links
+  content = content.replace(/<span class="mw-editsection"[\s\S]*?<\/span>/gi, '');
+  
+  // Remove navigation boxes, infoboxes, and sidebars
+  content = content.replace(/<table[^>]*class="[^"]*infobox[^"]*"[^>]*>[\s\S]*?<\/table>/gi, '');
+  content = content.replace(/<table[^>]*class="[^"]*navbox[^"]*"[^>]*>[\s\S]*?<\/table>/gi, '');
+  content = content.replace(/<table[^>]*class="[^"]*sidebar[^"]*"[^>]*>[\s\S]*?<\/table>/gi, '');
+  content = content.replace(/<div[^>]*class="[^"]*navbox[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+  content = content.replace(/<div[^>]*class="[^"]*thumb[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+  
+  // Remove figure and image elements
+  content = content.replace(/<figure[^>]*>[\s\S]*?<\/figure>/gi, '');
+  content = content.replace(/<img[^>]*>/gi, '');
+  
+  // Remove "See also", "References", "External links", "Further reading" sections
+  content = content.replace(/<h2[^>]*><span[^>]*id="See_also"[\s\S]*$/gi, '');
+  content = content.replace(/<h2[^>]*><span[^>]*id="References"[\s\S]*$/gi, '');
+  content = content.replace(/<h2[^>]*><span[^>]*id="External_links"[\s\S]*$/gi, '');
+  content = content.replace(/<h2[^>]*><span[^>]*id="Further_reading"[\s\S]*$/gi, '');
+  content = content.replace(/<h2[^>]*><span[^>]*id="Notes"[\s\S]*$/gi, '');
+  content = content.replace(/<h2[^>]*><span[^>]*id="Bibliography"[\s\S]*$/gi, '');
+  
+  // Convert headings
+  content = content.replace(/<h2[^>]*><span[^>]*>([^<]*)<\/span><\/h2>/gi, '\n\n## $1\n\n');
+  content = content.replace(/<h3[^>]*><span[^>]*>([^<]*)<\/span><\/h3>/gi, '\n\n### $1\n\n');
+  content = content.replace(/<h4[^>]*><span[^>]*>([^<]*)<\/span><\/h4>/gi, '\n\n#### $1\n\n');
+  content = content.replace(/<h2[^>]*>([^<]*)<\/h2>/gi, '\n\n## $1\n\n');
+  content = content.replace(/<h3[^>]*>([^<]*)<\/h3>/gi, '\n\n### $1\n\n');
+  content = content.replace(/<h4[^>]*>([^<]*)<\/h4>/gi, '\n\n#### $1\n\n');
+  
+  // Convert lists
+  content = content.replace(/<li[^>]*>/gi, '- ');
+  content = content.replace(/<\/li>/gi, '\n');
+  content = content.replace(/<\/?[ou]l[^>]*>/gi, '\n');
+  
+  // Convert paragraphs
+  content = content.replace(/<p[^>]*>/gi, '\n\n');
+  content = content.replace(/<\/p>/gi, '');
+  
+  // Convert bold and italic
+  content = content.replace(/<b[^>]*>([^<]*)<\/b>/gi, '**$1**');
+  content = content.replace(/<strong[^>]*>([^<]*)<\/strong>/gi, '**$1**');
+  content = content.replace(/<i[^>]*>([^<]*)<\/i>/gi, '*$1*');
+  content = content.replace(/<em[^>]*>([^<]*)<\/em>/gi, '*$1*');
+  
+  // Convert links - just keep the text
+  content = content.replace(/<a[^>]*>([^<]*)<\/a>/gi, '$1');
+  
+  // Remove remaining HTML tags
+  content = content.replace(/<[^>]+>/g, '');
+  
+  // Decode HTML entities
+  content = content.replace(/&nbsp;/g, ' ');
+  content = content.replace(/&amp;/g, '&');
+  content = content.replace(/&lt;/g, '<');
+  content = content.replace(/&gt;/g, '>');
+  content = content.replace(/&quot;/g, '"');
+  content = content.replace(/&#39;/g, "'");
+  content = content.replace(/&ndash;/g, '–');
+  content = content.replace(/&mdash;/g, '—');
+  
+  // Clean up whitespace
+  content = content.replace(/\n{4,}/g, '\n\n\n');
+  content = content.replace(/[ \t]+/g, ' ');
+  content = content.replace(/\n /g, '\n');
+  content = content.replace(/ \n/g, '\n');
+  
+  // Add title
+  content = `# ${title}\n\n${content.trim()}`;
+  
+  return content;
+}
+
+/**
+ * Format Wikipedia plaintext content into proper markdown (for extracts fallback)
  */
 function formatWikipediaContent(title: string, extract: string): string {
   let content = extract;
   
-  // Convert section headers (Wikipedia returns them as "== Title ==")
   content = content.replace(/^====\s*(.+?)\s*====$/gm, '#### $1');
   content = content.replace(/^===\s*(.+?)\s*===$/gm, '### $1');
   content = content.replace(/^==\s*(.+?)\s*==$/gm, '## $1');
   
-  // Add the title as H1
   content = `# ${title}\n\n${content}`;
-  
-  // Clean up excessive newlines
   content = content.replace(/\n{4,}/g, '\n\n\n');
-  
-  // Ensure paragraphs are separated properly
   content = content.replace(/\n\n/g, '\n\n');
   
   return content.trim();
@@ -164,18 +302,49 @@ export async function searchWikipedia(query: string, limit = 10): Promise<{ titl
 }
 
 /**
- * Get a random Wikipedia article
+ * Get multiple random Wikipedia articles
+ * Filters out disambiguation pages and lists
+ */
+export async function getRandomWikipediaTopics(count: number = 10): Promise<string[]> {
+  const topics: string[] = [];
+  const maxAttempts = count * 3; // Allow for some failures
+  let attempts = 0;
+  
+  while (topics.length < count && attempts < maxAttempts) {
+    try {
+      const response = await fetch(`${WIKIPEDIA_API}/page/random/summary`);
+      if (response.ok) {
+        const data = await response.json();
+        const title = data.title;
+        
+        // Filter out unwanted article types
+        if (title && 
+            !title.includes('(disambiguation)') &&
+            !title.startsWith('List of') &&
+            !title.startsWith('Lists of') &&
+            !title.includes('discography') &&
+            !title.includes('filmography') &&
+            !title.match(/^\d{4}\s/) && // Years like "2023 in..."
+            !title.match(/^(January|February|March|April|May|June|July|August|September|October|November|December)\s\d/) &&
+            data.extract && data.extract.length > 100) {
+          topics.push(title);
+        }
+      }
+    } catch (e) {
+      console.error('Random topic error:', e);
+    }
+    attempts++;
+  }
+  
+  return topics;
+}
+
+/**
+ * Get a single random Wikipedia topic
  */
 export async function getRandomWikipediaArticle(): Promise<string | null> {
-  try {
-    const response = await fetch(`${WIKIPEDIA_API}/page/random/summary`);
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data.title;
-  } catch (e) {
-    console.error('Wikipedia random error:', e);
-    return null;
-  }
+  const topics = await getRandomWikipediaTopics(1);
+  return topics[0] || null;
 }
 
 // ============================================
@@ -192,17 +361,15 @@ export interface GrokipediaArticle {
 
 /**
  * Fetch Grokipedia content via xAI API
- * Note: Requires API key - should be called server-side in production
  */
 export async function fetchGrokipediaContent(
   topic: string,
   apiKey?: string
 ): Promise<GrokipediaArticle | null> {
-  // If no API key, return demo content
   if (!apiKey) {
     return {
       title: topic,
-      content: generateGrokipediaDemoContent(topic),
+      content: sanitizeContent(generateGrokipediaDemoContent(topic), 'grokipedia'),
       source: 'grokipedia',
     };
   }
@@ -219,7 +386,13 @@ export async function fetchGrokipediaContent(
         messages: [
           {
             role: 'system',
-            content: `You are Grokipedia, an AI-powered encyclopedia. Write a comprehensive, factual, well-structured article about the given topic using markdown formatting.
+            content: `You are writing an encyclopedia article. Write a comprehensive, factual, well-structured article about the given topic using markdown formatting.
+
+IMPORTANT RULES:
+- Do NOT mention your name, source, or that you are an AI
+- Do NOT include phrases like "this article" or "this entry"
+- Write as if you are a neutral, anonymous encyclopedia
+- Focus purely on factual information about the topic
 
 Structure your response with:
 - A title as # heading
@@ -229,7 +402,7 @@ Structure your response with:
 - Historical context if relevant
 - Current developments or applications
 
-Write in an engaging, encyclopedic style. Use proper markdown formatting including headers, bold, italic, and bullet points where appropriate.`
+Write in an engaging, encyclopedic style.`
           },
           {
             role: 'user',
@@ -245,7 +418,7 @@ Write in an engaging, encyclopedic style. Use proper markdown formatting includi
       console.error('Grok API error:', response.status);
       return {
         title: topic,
-        content: generateGrokipediaDemoContent(topic),
+        content: sanitizeContent(generateGrokipediaDemoContent(topic), 'grokipedia'),
         source: 'grokipedia',
       };
     }
@@ -255,14 +428,14 @@ Write in an engaging, encyclopedic style. Use proper markdown formatting includi
 
     return {
       title: topic,
-      content,
+      content: sanitizeContent(content, 'grokipedia'),
       source: 'grokipedia',
     };
   } catch (e) {
     console.error('Grokipedia error:', e);
     return {
       title: topic,
-      content: generateGrokipediaDemoContent(topic),
+      content: sanitizeContent(generateGrokipediaDemoContent(topic), 'grokipedia'),
       source: 'grokipedia',
     };
   }
@@ -271,7 +444,7 @@ Write in an engaging, encyclopedic style. Use proper markdown formatting includi
 function generateGrokipediaDemoContent(topic: string): string {
   return `# ${topic}
 
-${topic} is a fascinating subject that encompasses various aspects of human knowledge and understanding. This AI-generated article provides an overview of the key concepts and information related to this topic.
+${topic} is a subject of significant interest that encompasses various aspects of human knowledge and understanding.
 
 ## Overview
 
@@ -279,7 +452,7 @@ The study and understanding of ${topic} has evolved significantly over time, wit
 
 ## Key Concepts
 
-Key aspects of ${topic} include:
+Key aspects include:
 
 - **Fundamental principles** - The core ideas that form the foundation of understanding
 - **Practical applications** - How this knowledge is applied in real-world scenarios
@@ -287,16 +460,17 @@ Key aspects of ${topic} include:
 
 Understanding these elements provides a solid foundation for deeper exploration of the subject.
 
+## Historical Context
+
+The historical development of ${topic} can be traced through multiple periods, each contributing unique insights and advancements to our current understanding. From early observations and theories to modern investigations, knowledge in this area has grown substantially.
+
 ## Recent Developments
 
 In recent years, ${topic} has gained increased attention due to technological advancements and changing societal needs. This has led to new research directions, innovative applications, and broader public awareness.
 
-## Further Reading
+## Significance
 
-For those interested in learning more about ${topic}, there are numerous resources available including academic papers, books, online courses, and expert communities dedicated to advancing knowledge in this area.
-
----
-*Note: This is demo content. Configure your xAI API key to get real AI-generated encyclopedia articles from Grokipedia.*`;
+For those interested in learning more, there are numerous resources available including academic papers, books, online courses, and expert communities dedicated to advancing knowledge in this area.`;
 }
 
 // ============================================
@@ -312,15 +486,11 @@ export interface BritannicaArticle {
 
 /**
  * Fetch Encyclopedia Britannica content
- * Note: Britannica doesn't have a public API, so we provide curated demo content
- * In production, you would need a Britannica API partnership or use web scraping (with permission)
  */
 export async function fetchBritannicaContent(topic: string): Promise<BritannicaArticle | null> {
-  // Britannica doesn't have a public API
-  // In production, you would integrate with their API (if available) or use licensed content
   return {
     title: topic,
-    content: generateBritannicaDemoContent(topic),
+    content: sanitizeContent(generateBritannicaDemoContent(topic), 'britannica'),
     source: 'britannica',
     url: `https://www.britannica.com/search?query=${encodeURIComponent(topic)}`,
   };
@@ -329,17 +499,25 @@ export async function fetchBritannicaContent(topic: string): Promise<BritannicaA
 function generateBritannicaDemoContent(topic: string): string {
   return `# ${topic}
 
-**Encyclopedia Britannica** has been the gold standard of reference works since 1768, providing accurate, expert-written content on millions of topics.
+${topic} represents an important area of human knowledge that has been extensively documented and studied by scholars and experts worldwide.
 
 ## Introduction
 
-${topic} represents an important area of human knowledge that has been extensively documented and studied by scholars and experts worldwide. The Encyclopedia Britannica's coverage of this topic draws upon centuries of accumulated knowledge and the expertise of leading authorities in the field.
+The subject draws upon centuries of accumulated knowledge and the expertise of leading authorities in the field. Understanding ${topic} requires examining both its historical foundations and contemporary developments.
 
 ## Historical Background
 
 The historical development of ${topic} can be traced through multiple periods, each contributing unique insights and advancements to our current understanding. From early observations and theories to modern scientific and scholarly investigations, the evolution of knowledge in this area demonstrates humanity's persistent quest for understanding.
 
-## Contemporary Perspectives
+## Key Aspects
+
+Several key aspects define our understanding of ${topic}:
+
+- **Theoretical foundations** - The underlying principles and frameworks
+- **Empirical evidence** - Observations and data supporting current understanding
+- **Practical implications** - How this knowledge affects various fields and applications
+
+## Contemporary Understanding
 
 Contemporary perspectives on ${topic} reflect both traditional scholarship and cutting-edge research. Experts continue to refine our understanding through:
 
@@ -348,19 +526,85 @@ Contemporary perspectives on ${topic} reflect both traditional scholarship and c
 - Integration of new technologies and methodologies
 - Cross-disciplinary collaboration
 
-## Significance and Applications
+## Applications and Impact
 
 The practical applications and implications of ${topic} extend across various domains, influencing:
 
-- **Education** - How we teach and learn about this subject
-- **Policy** - Decisions made by governments and organizations
+- **Education** - How this subject is taught and learned
+- **Research** - Ongoing investigations and discoveries
 - **Technology** - Innovations inspired by this knowledge
-- **Daily life** - How this affects ordinary people
+- **Society** - Broader cultural and social implications
 
-Understanding these connections helps illuminate the broader significance of this subject.
+Understanding these connections helps illuminate the broader significance of this subject in both historical and contemporary contexts.`;
+}
 
----
-*Note: This is demo content representing Britannica's encyclopedic style. In production, this would contain actual licensed Britannica content.*`;
+// ============================================
+// CONTENT SANITIZATION
+// ============================================
+
+/**
+ * Remove source self-references from content to ensure blind comparisons
+ */
+function sanitizeContent(content: string, source: SourceSlug): string {
+  let sanitized = content;
+  
+  // Common patterns to remove (case-insensitive)
+  const patternsToRemove = [
+    // Wikipedia references
+    /\bWikipedia\b/gi,
+    /\bthe free encyclopedia\b/gi,
+    /\bfrom Wikipedia\b/gi,
+    /\bWikipedia['']s\b/gi,
+    /\bthis Wikipedia article\b/gi,
+    
+    // Grokipedia/Grok/xAI references
+    /\bGrokipedia\b/gi,
+    /\bGrok\b/gi,
+    /\bxAI\b/gi,
+    /\bAI-powered\s*(encyclopedia|knowledge|article)?\b/gi,
+    /\bAI-generated\b/gi,
+    /\bthis AI\b/gi,
+    /\bas an AI\b/gi,
+    /\bI am an AI\b/gi,
+    /\bI'm an AI\b/gi,
+    
+    // Britannica references
+    /\bEncyclopedia Britannica\b/gi,
+    /\bEncyclopædia Britannica\b/gi,
+    /\bBritannica\b/gi,
+    /\bBritannica['']s\b/gi,
+    /\bthe gold standard of reference works\b/gi,
+    /\bsince 1768\b/gi,
+    /\bexpert-written content\b/gi,
+    /\btrusted encyclopedia\b/gi,
+    
+    // Generic self-references
+    /\bthis encyclopedia\b/gi,
+    /\bthis article\b/gi,
+    /\bthis entry\b/gi,
+    /\bour coverage\b/gi,
+    /\bwe provide\b/gi,
+    /\bwe offer\b/gi,
+    
+    // Demo/placeholder notices
+    /\*Note:.*?(?:demo|placeholder|configure|API key).*?\*/gi,
+    /---\s*\*Note:.*?\*/gis,
+  ];
+  
+  for (const pattern of patternsToRemove) {
+    sanitized = sanitized.replace(pattern, '');
+  }
+  
+  // Clean up resulting artifacts
+  sanitized = sanitized.replace(/\s{3,}/g, '\n\n'); // Multiple spaces/newlines
+  sanitized = sanitized.replace(/^\s*[-•]\s*$/gm, ''); // Empty list items
+  sanitized = sanitized.replace(/\n{3,}/g, '\n\n'); // Multiple newlines
+  sanitized = sanitized.replace(/,\s*,/g, ','); // Double commas
+  sanitized = sanitized.replace(/\.\s*\./g, '.'); // Double periods
+  sanitized = sanitized.replace(/\s+\./g, '.'); // Space before period
+  sanitized = sanitized.replace(/\s+,/g, ','); // Space before comma
+  
+  return sanitized.trim();
 }
 
 // ============================================
@@ -447,7 +691,23 @@ export async function fetchContentFromAllSources(
 // ============================================
 
 /**
- * Get source emoji
+ * Source logo URLs
+ */
+export const SOURCE_LOGOS: Record<SourceSlug, string> = {
+  wikipedia: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/103px-Wikipedia-logo-v2.svg.png',
+  grokipedia: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/X.ai_logo.svg/200px-X.ai_logo.svg.png',
+  britannica: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Britannica_logo.svg/200px-Britannica_logo.svg.png',
+};
+
+/**
+ * Get source logo URL
+ */
+export function getSourceLogo(slug: SourceSlug): string {
+  return SOURCE_LOGOS[slug] || '';
+}
+
+/**
+ * Get source emoji (for fallback/non-comparison contexts)
  */
 export function getSourceEmoji(slug: SourceSlug): string {
   switch (slug) {
@@ -467,5 +727,17 @@ export function getSourceColor(slug: SourceSlug): string {
     case 'grokipedia': return 'text-purple-400';
     case 'britannica': return 'text-amber-400';
     default: return 'text-slate-400';
+  }
+}
+
+/**
+ * Get source background color class
+ */
+export function getSourceBgColor(slug: SourceSlug): string {
+  switch (slug) {
+    case 'wikipedia': return 'bg-blue-500/20';
+    case 'grokipedia': return 'bg-purple-500/20';
+    case 'britannica': return 'bg-amber-500/20';
+    default: return 'bg-slate-500/20';
   }
 }

@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { leaderboardStore, isLeaderboardLoading } from '$lib/stores/leaderboard';
   import { getRatingInterval } from '$lib/services/glicko2';
-  import { getSourceEmoji, type SourceSlug } from '$lib/services/content';
+  import { getSourceLogo, getSourceColor, type SourceSlug } from '$lib/services/content';
 
   onMount(async () => {
     await leaderboardStore.load();
@@ -28,8 +28,12 @@
   }
 
   // Helper to avoid TypeScript 'as' in template
-  function getEmoji(slug: string): string {
-    return getSourceEmoji(slug as SourceSlug);
+  function getLogo(slug: string): string {
+    return getSourceLogo(slug as SourceSlug);
+  }
+  
+  function getColor(slug: string): string {
+    return getSourceColor(slug as SourceSlug);
   }
 </script>
 
@@ -106,11 +110,15 @@
           <!-- Source Info -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center text-xl flex-shrink-0">
-                {getEmoji(entry.slug)}
+              <div class="w-10 h-10 rounded-lg bg-white/10 p-1.5 flex items-center justify-center flex-shrink-0">
+                <img 
+                  src={getLogo(entry.slug)} 
+                  alt={entry.name}
+                  class="max-w-full max-h-full object-contain"
+                />
               </div>
               <div class="min-w-0">
-                <h3 class="font-semibold truncate">{entry.name}</h3>
+                <h3 class="font-semibold truncate {getColor(entry.slug)}">{entry.name}</h3>
                 <p class="text-sm text-slate-500 truncate">
                   {entry.total_matches} matches · {entry.win_rate}% win rate
                 </p>

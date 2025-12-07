@@ -75,74 +75,131 @@ export const DEMO_TOPICS: Topic[] = [
   { id: 't5', title: 'The Renaissance', slug: 'the-renaissance', category: 'History', description: null, usage_count: 22, is_active: true, created_at: new Date().toISOString() },
 ];
 
-// Demo content for sources
+// Demo content for sources - written to be source-agnostic
 export const DEMO_CONTENT: Record<string, Record<string, string>> = {
   'artificial-intelligence': {
-    wikipedia: `Artificial intelligence (AI) is intelligence demonstrated by machines, as opposed to natural intelligence displayed by animals including humans. AI research has been defined as the field of study of intelligent agents, which refers to any system that perceives its environment and takes actions that maximize its chance of achieving its goals.
+    wikipedia: `# Artificial Intelligence
 
-The term "artificial intelligence" was coined in 1956, and AI has since become an umbrella term covering a wide variety of subfields. General-purpose techniques include search and mathematical optimization, formal logic, artificial neural networks, and statistical methods. Major goals of AI research include reasoning, knowledge representation, planning, learning, natural language processing, and perception.`,
+Artificial intelligence (AI) is intelligence demonstrated by machines, as opposed to natural intelligence displayed by animals including humans. AI research has been defined as the field of study of intelligent agents, which refers to any system that perceives its environment and takes actions that maximize its chance of achieving its goals.
+
+## History
+
+The term "artificial intelligence" was coined in 1956, and AI has since become an umbrella term covering a wide variety of subfields.
+
+## Techniques
+
+General-purpose techniques include search and mathematical optimization, formal logic, artificial neural networks, and statistical methods.
+
+## Research Goals
+
+Major goals of AI research include reasoning, knowledge representation, planning, learning, natural language processing, and perception.`,
     
-    grokipedia: `**Artificial Intelligence: The Frontier of Machine Cognition**
+    grokipedia: `# Artificial Intelligence
 
 AI represents humanity's bold attempt to recreate aspects of human intelligence in silicon form. At its core, AI systems are sophisticated pattern-recognition engines that learn from vast amounts of data to make predictions and decisions.
 
+## Categories
+
 Modern AI can be broadly categorized into:
+
 - **Narrow AI**: Systems designed for specific tasks (like chess, image recognition, or language translation)
 - **General AI**: The still-theoretical goal of human-level reasoning across all domains
 
+## Deep Learning Revolution
+
 The current AI revolution is largely driven by deep learning—neural networks with many layers that can automatically discover complex patterns in data. This has enabled breakthrough applications in computer vision, natural language processing, and game playing.`,
 
-    britannica: `Artificial intelligence (AI), the ability of a digital computer or computer-controlled robot to perform tasks commonly associated with intelligent beings. The term is frequently applied to the project of developing systems endowed with the intellectual processes characteristic of humans, such as the ability to reason, discover meaning, generalize, or learn from past experience.
+    britannica: `# Artificial Intelligence
+
+Artificial intelligence (AI) is the ability of a digital computer or computer-controlled robot to perform tasks commonly associated with intelligent beings. The term is frequently applied to the project of developing systems endowed with the intellectual processes characteristic of humans, such as the ability to reason, discover meaning, generalize, or learn from past experience.
+
+## Development
 
 Since the development of the digital computer in the 1940s, it has been demonstrated that computers can be programmed to carry out very complex tasks with great proficiency. Still, despite continuing advances in computer processing speed and memory capacity, there are as yet no programs that can match full human flexibility over wider domains or in tasks requiring much everyday knowledge.
+
+## Origins
 
 The field of AI research was founded at a workshop held on the campus of Dartmouth College during the summer of 1956. Those who attended would become the leaders of AI research for decades.`,
   },
   'climate-change': {
-    wikipedia: `Climate change refers to long-term shifts in global or regional climate patterns. Often specifically refers to the ongoing rise in global average temperature since the mid-20th century, primarily attributed to human activities, especially the burning of fossil fuels which increases heat-trapping greenhouse gas levels in Earth's atmosphere.
+    wikipedia: `# Climate Change
+
+Climate change refers to long-term shifts in global or regional climate patterns. Often specifically refers to the ongoing rise in global average temperature since the mid-20th century, primarily attributed to human activities, especially the burning of fossil fuels which increases heat-trapping greenhouse gas levels in Earth's atmosphere.
+
+## Scientific Consensus
 
 The Intergovernmental Panel on Climate Change (IPCC) has produced a series of Assessment Reports and Special Reports that are widely referenced in discussions of climate change science, impacts, and solutions. Scientific consensus is that climate change is real, human-caused, and poses significant risks to human and natural systems.`,
     
-    grokipedia: `**Climate Change: Earth's Fever**
+    grokipedia: `# Climate Change
 
 Climate change is perhaps the defining challenge of our era. The science is clear: human activities, particularly burning fossil fuels and deforestation, have increased atmospheric CO2 from ~280 ppm (pre-industrial) to over 420 ppm today—levels not seen in 800,000 years.
 
+## Key Impacts
+
 Key impacts already observed:
+
 - Global temperature rise of ~1.1°C since pre-industrial times
 - Sea level rise of 8-9 inches since 1880
 - More frequent extreme weather events
 - Shifting ecosystems and species migration
 
+## Solutions
+
 The good news? We have the technology to address it. Solar and wind are now the cheapest forms of new electricity generation in most of the world. Electric vehicles are reaching price parity with gas cars. The transition is happening—the question is whether it's fast enough.`,
 
-    britannica: `Climate change, periodic modification of Earth's climate brought about as a result of changes in the atmosphere as well as interactions between the atmosphere and various other geologic, chemical, biological, and geographic factors within the Earth system.
+    britannica: `# Climate Change
+
+Climate change is the periodic modification of Earth's climate brought about as a result of changes in the atmosphere as well as interactions between the atmosphere and various other geologic, chemical, biological, and geographic factors within the Earth system.
+
+## Atmospheric Dynamics
 
 The atmosphere is a dynamic fluid that is continually in motion. Both its physical properties and its rate and direction of motion are influenced by a variety of factors, including solar radiation, the geographic position of continents, ocean currents, the location and orientation of mountain ranges, atmospheric chemistry, and vegetation growing on the land surface.
+
+## Historical Evidence
 
 Since the mid-20th century, scientists have been collecting detailed observations of various weather phenomena. These meteorological records, combined with geological evidence for climate conditions in the past, show that Earth's climate has changed substantially throughout its history.`,
   },
   'quantum-computing': {
-    wikipedia: `Quantum computing is a type of computation that harnesses quantum mechanical phenomena, such as superposition and entanglement, to process information. Quantum computers use quantum bits or qubits, which can exist in multiple states simultaneously, allowing them to solve certain problems much faster than classical computers.
+    wikipedia: `# Quantum Computing
 
-First proposed by physicist Richard Feynman in 1982, quantum computing has since advanced from theoretical concept to working prototypes. Major tech companies including IBM, Google, and Microsoft are investing heavily in quantum computing research. In 2019, Google claimed to have achieved "quantum supremacy"—demonstrating a quantum computer performing a calculation that would be impractical for classical computers.`,
+Quantum computing is a type of computation that harnesses quantum mechanical phenomena, such as superposition and entanglement, to process information. Quantum computers use quantum bits or qubits, which can exist in multiple states simultaneously, allowing them to solve certain problems much faster than classical computers.
+
+## History
+
+First proposed by physicist Richard Feynman in 1982, quantum computing has since advanced from theoretical concept to working prototypes. Major tech companies including IBM, Google, and Microsoft are investing heavily in quantum computing research.
+
+## Quantum Supremacy
+
+In 2019, Google claimed to have achieved "quantum supremacy"—demonstrating a quantum computer performing a calculation that would be impractical for classical computers.`,
     
-    grokipedia: `**Quantum Computing: Computing's Next Giant Leap**
+    grokipedia: `# Quantum Computing
 
 Imagine a computer that doesn't just calculate one possibility at a time, but explores millions of possibilities simultaneously. That's the promise of quantum computing.
 
+## How It Works
+
 Classical computers use bits (0 or 1). Quantum computers use qubits, which can be 0, 1, or both at once (superposition). When you combine multiple qubits, they can be "entangled"—meaning the state of one affects others instantly.
 
-**Why it matters:**
-- Drug discovery: Simulating molecular interactions accurately
-- Cryptography: Both breaking and creating unbreakable codes
-- Optimization: Solving logistics problems with countless variables
-- AI: Training models exponentially faster
+## Why It Matters
 
-**Current state:** We're in the "ENIAC era" of quantum computing—the machines work but are room-sized, extremely expensive, and error-prone. But progress is accelerating.`,
+- **Drug discovery**: Simulating molecular interactions accurately
+- **Cryptography**: Both breaking and creating unbreakable codes
+- **Optimization**: Solving logistics problems with countless variables
+- **AI**: Training models exponentially faster
 
-    britannica: `Quantum computing, a method of computation that uses quantum-mechanical phenomena, such as superposition and entanglement, to perform operations on data. A quantum computer differs from a classical digital computer in that it uses quantum bits, or qubits, which can exist in superposition of states.
+## Current State
+
+We're in the "ENIAC era" of quantum computing—the machines work but are room-sized, extremely expensive, and error-prone. But progress is accelerating.`,
+
+    britannica: `# Quantum Computing
+
+Quantum computing is a method of computation that uses quantum-mechanical phenomena, such as superposition and entanglement, to perform operations on data. A quantum computer differs from a classical digital computer in that it uses quantum bits, or qubits, which can exist in superposition of states.
+
+## Fundamental Concepts
 
 The fundamental unit of classical computing is the bit, which can be either 0 or 1. By contrast, a qubit can be 0, 1, or any quantum superposition of those two states. This property is what enables quantum computers to process vast numbers of possibilities simultaneously.
+
+## Origins and Development
 
 The concept of quantum computing was first explored in the 1980s by physicist Richard Feynman, who proposed that a computer based on quantum mechanics could simulate physical processes that classical computers could not efficiently model. Since then, researchers have made significant progress in developing practical quantum computing systems.`,
   },
@@ -178,6 +235,7 @@ export function getRandomDemoTopic(): Topic {
 
 /**
  * Get demo content for a topic
+ * Note: Content is source-agnostic to maintain blind comparison integrity
  */
 export function getDemoContent(topicSlug: string, sourceSlug: string): string {
   const topicContent = DEMO_CONTENT[topicSlug];
@@ -189,46 +247,77 @@ export function getDemoContent(topicSlug: string, sourceSlug: string): string {
   const topic = DEMO_TOPICS.find(t => t.slug === topicSlug);
   const topicTitle = topic?.title || topicSlug.replace(/-/g, ' ');
   
-  // Find source name
-  const source = DEMO_SOURCES.find(s => s.slug === sourceSlug);
-  const sourceName = source?.name || sourceSlug;
-  
-  // Generate fallback content based on source type
+  // Generate fallback content - varies by source type but without naming the source
   if (sourceSlug === 'wikipedia') {
-    return `**${topicTitle}** is a topic of significant interest and research. This article provides an overview based on encyclopedic knowledge.
+    return `# ${topicTitle}
 
-This is placeholder content for "${topicTitle}" from Wikipedia. In production with Supabase configured, real Wikipedia content would be fetched via the MediaWiki API.
+${topicTitle} is a topic of significant interest and research across multiple disciplines.
 
-The topic encompasses various aspects and has been studied extensively by researchers and practitioners in the field. For more detailed information, please configure your Supabase connection to enable live Wikipedia integration.`;
+## Overview
+
+The subject encompasses various aspects and has been studied extensively by researchers and practitioners in the field. Understanding ${topicTitle} requires examining both historical context and contemporary developments.
+
+## Key Concepts
+
+The fundamental principles underlying ${topicTitle} form the basis for deeper exploration. Scholars have identified several important areas of study within this domain.
+
+## Significance
+
+${topicTitle} continues to be an active area of research and discussion, with ongoing developments contributing to our understanding of this important subject.`;
   } else if (sourceSlug === 'grokipedia') {
-    return `**${topicTitle}: An AI Perspective**
+    return `# ${topicTitle}
 
-Let me break down ${topicTitle} for you in a way that's both informative and accessible.
+Let's explore ${topicTitle} in a way that's both informative and accessible.
 
-This is simulated Grokipedia content about "${topicTitle}". In a production environment with an xAI API key configured, this would be real-time AI-generated content from Grok.
+## Understanding the Basics
 
-Key aspects worth understanding:
-• The fundamental concepts and their practical applications
-• Current developments and future implications  
-• How this connects to broader fields of knowledge
+${topicTitle} is a fascinating subject that touches on multiple areas of knowledge. At its core, it involves understanding key principles that have developed over time.
 
-Configure your environment variables to enable live AI-powered content generation.`;
+## Key Aspects
+
+Important elements worth understanding:
+
+- **Fundamental concepts** - The core ideas and their practical applications
+- **Current developments** - Recent advances and future implications  
+- **Broader connections** - How this relates to other fields of knowledge
+
+## Why It Matters
+
+Understanding ${topicTitle} provides valuable insights that can be applied across various contexts and disciplines.`;
   } else if (sourceSlug === 'britannica') {
-    return `**${topicTitle}**
+    return `# ${topicTitle}
 
-Encyclopedia Britannica presents this authoritative article on ${topicTitle}, drawing upon centuries of scholarly expertise and rigorous editorial standards.
+${topicTitle} represents an important area of human knowledge that has been extensively documented by experts and scholars worldwide.
 
-${topicTitle} represents an important subject that has been extensively documented by experts and scholars worldwide. The Encyclopedia Britannica's coverage of this topic reflects the highest standards of accuracy and comprehensiveness.
+## Introduction
 
-This is demo content simulating Britannica's encyclopedic style. In a production environment with proper API access or content licensing, this would display actual Britannica content.
+The coverage of this topic draws upon centuries of accumulated knowledge and the expertise of leading authorities in the field. Understanding ${topicTitle} requires examining both its historical foundations and contemporary developments.
 
-The historical development, key concepts, and contemporary significance of ${topicTitle} are areas that merit careful scholarly attention and continued research.`;
+## Historical Development
+
+The historical development of ${topicTitle} can be traced through multiple periods, each contributing unique insights to our current understanding.
+
+## Contemporary Understanding
+
+Contemporary perspectives reflect both traditional scholarship and cutting-edge research. Experts continue to refine our understanding through rigorous investigation and academic discourse.
+
+## Significance
+
+The practical applications and implications of ${topicTitle} extend across various domains, influencing education, research, and broader society.`;
   }
   
   // Generic fallback
-  return `Content about "${topicTitle}" from ${sourceName}. 
+  return `# ${topicTitle}
 
-This is demo placeholder content. Configure Supabase and API keys to see real content from knowledge sources.`;
+${topicTitle} is a subject of interest and study across multiple disciplines.
+
+## Overview
+
+This topic encompasses various aspects that have been examined by researchers and practitioners. Understanding the fundamental concepts provides a foundation for deeper exploration.
+
+## Key Points
+
+The study of ${topicTitle} involves understanding its historical context, current applications, and future implications.`;
 }
 
 /**

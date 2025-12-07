@@ -4,7 +4,7 @@
   import { supabase, isSupabaseConfigured, getSessionId } from '$lib/supabaseClient';
   import { authStore, isAuthenticated, currentUser } from '$lib/stores/auth';
   import AuthModal from '$lib/components/AuthModal.svelte';
-  import { getSourceEmoji, type SourceSlug } from '$lib/services/content';
+  import { getSourceLogo, getSourceColor, type SourceSlug } from '$lib/services/content';
 
   interface VoteRecord {
     id: string;
@@ -173,8 +173,12 @@
   }
 
   // Helper to avoid TypeScript 'as' in template
-  function getEmoji(slug: string | undefined, fallback: string): string {
-    return getSourceEmoji((slug || fallback) as SourceSlug);
+  function getLogo(slug: string | undefined, fallback: string): string {
+    return getSourceLogo((slug || fallback) as SourceSlug);
+  }
+  
+  function getColor(slug: string | undefined, fallback: string): string {
+    return getSourceColor((slug || fallback) as SourceSlug);
   }
 </script>
 
@@ -281,7 +285,11 @@
               
               <div class="flex items-center gap-4 text-sm">
                 <div class="flex items-center gap-2">
-                  <span>{getEmoji(vote.match?.source_a?.slug, 'wikipedia')}</span>
+                  <img 
+                    src={getLogo(vote.match?.source_a?.slug, 'wikipedia')} 
+                    alt=""
+                    class="w-5 h-5 object-contain"
+                  />
                   <span class="{vote.winner === 'a' ? 'text-emerald-400 font-semibold' : 'text-slate-400'}">
                     {vote.match?.source_a?.name || 'Source A'}
                   </span>
@@ -293,7 +301,11 @@
                 <span class="text-slate-600">vs</span>
                 
                 <div class="flex items-center gap-2">
-                  <span>{getEmoji(vote.match?.source_b?.slug, 'grokipedia')}</span>
+                  <img 
+                    src={getLogo(vote.match?.source_b?.slug, 'grokipedia')} 
+                    alt=""
+                    class="w-5 h-5 object-contain"
+                  />
                   <span class="{vote.winner === 'b' ? 'text-emerald-400 font-semibold' : 'text-slate-400'}">
                     {vote.match?.source_b?.name || 'Source B'}
                   </span>

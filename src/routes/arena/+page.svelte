@@ -8,10 +8,12 @@
   import { 
     searchWikipedia, 
     fetchContentFromSource, 
-    getSourceEmoji,
+    getSourceLogo,
+    getSourceColor,
     type SourceSlug,
     type SourceContent 
   } from '$lib/services/content';
+  import { getRandomTopic, getRandomCuratedTopic } from '$lib/services/topics';
   import { calculateMatchOutcome, createRating } from '$lib/services/glicko2';
   import type { Source, VoteWinner } from '$lib/types/database';
 
@@ -49,9 +51,10 @@
   let voteStartTime = 0;
   let showAuthModal = false;
   let contentExpanded = { left: false, right: false };
+  let isLoadingRandomTopic = false;
 
   // Content truncation settings
-  const TRUNCATE_LENGTH = 2000; // Show first 2000 chars by default
+  const TRUNCATE_LENGTH = 2000;
 
   // Search debounce
   let searchTimeout: ReturnType<typeof setTimeout>;
@@ -61,9 +64,13 @@
     await loadSources();
   });
 
-  // Helper function to get emoji (avoids TypeScript 'as' in template)
-  function getEmoji(slug: string): string {
-    return getSourceEmoji(slug as SourceSlug);
+  // Helper function to get logo URL (avoids TypeScript 'as' in template)
+  function getLogo(slug: string): string {
+    return getSourceLogo(slug as SourceSlug);
+  }
+
+  function getColor(slug: string): string {
+    return getSourceColor(slug as SourceSlug);
   }
 
   async function loadSources() {
@@ -114,20 +121,23 @@
   }
 
   async function loadRandomTopic() {
-    phase = 'loading';
+    isLoadingRandomTopic = true;
     error = null;
     
-    // List of interesting topics
-    const randomTopics = [
-      'Artificial Intelligence', 'Climate Change', 'Quantum Computing', 'Black Holes',
-      'The Renaissance', 'Machine Learning', 'DNA', 'Solar Energy', 'Cryptocurrency',
-      'Evolution', 'Neural Networks', 'The Cold War', 'Cybersecurity', 'Genetics',
-      'Virtual Reality', 'The Big Bang', 'Blockchain', 'Ancient Rome', 'Plate Tectonics'
-    ];
-    
-    const topic = randomTopics[Math.floor(Math.random() * randomTopics.length)];
-    currentTopic = topic;
-    await loadComparison(topic);
+    try {
+      // Get a truly random topic from Wikipedia or curated list
+      const topic = await getRandomTopic();
+      currentTopic = topic;
+      await loadComparison(topic);
+    } catch (e) {
+      console.error('Random topic error:', e);
+      // Fall back to curated topic
+      const fallbackTopic = getRandomCuratedTopic();
+      currentTopic = fallbackTopic;
+      await loadComparison(fallbackTopic);
+    } finally {
+      isLoadingRandomTopic = false;
+    }
   }
 
   async function loadComparison(topic: string) {
@@ -188,8 +198,8 @@
 
       // Calculate Glicko-2 rating changes
       let glickoWinner: 'a' | 'b' | 'tie' = 'tie';
-      if (winner === 'a') glickoWinner = 'a'; // 'a' = left
-      else if (winner === 'b') glickoWinner = 'b'; // 'b' = right
+      if (winner === 'a') glickoWinner = 'a';
+      else if (winner === 'b') glickoWinner = 'b';
 
       const ratingLeft = createRating(leftSource.rating, leftSource.rating_deviation, leftSource.volatility);
       const ratingRight = createRating(rightSource.rating, rightSource.rating_deviation, rightSource.volatility);
@@ -206,7 +216,7 @@
           p_source_b_id: rightSource.id,
           p_source_a_content: leftDisplay.content.content.substring(0, 5000),
           p_source_b_content: rightDisplay.content.content.substring(0, 5000),
-          p_source_a_position: 1, // left = 1
+          p_source_a_position: 1,
           p_winner: winner,
           p_session_id: sessionId,
           p_user_id: userId,
@@ -221,7 +231,6 @@
 
         if (rpcError) {
           console.error('Vote submission error:', rpcError);
-          // Continue anyway to show results
         }
       }
 
@@ -259,7 +268,6 @@
     if (expanded || content.length <= TRUNCATE_LENGTH) {
       return content;
     }
-    // Find a good break point (end of paragraph or sentence)
     let truncated = content.substring(0, TRUNCATE_LENGTH);
     const lastParagraph = truncated.lastIndexOf('\n\n');
     const lastSentence = truncated.lastIndexOf('. ');
@@ -292,7 +300,7 @@
   <!-- Header -->
   <div class="text-center mb-8">
     <h1 class="text-3xl font-bold mb-2">⚔️ The Arena</h1>
-    <p class="text-slate-400">Compare knowledge sources head-to-head</p>
+    <p class="text-slate-400">Compare knowledge sources head-to-head in a blind test</p>
     
     <!-- Auth Status -->
     <div class="mt-4 flex items-center justify-center gap-4">
@@ -371,11 +379,23 @@
 
         <!-- Random Button -->
         <button
-          class="w-full py-4 px-6 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-semibold rounded-xl hover:from-amber-400 hover:to-orange-400 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+          class="w-full py-4 px-6 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-semibold rounded-xl hover:from-amber-400 hover:to-orange-400 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           on:click={loadRandomTopic}
+          disabled={isLoadingRandomTopic}
         >
-          🎲 Random Topic
+          {#if isLoadingRandomTopic}
+            <span class="inline-flex items-center gap-2">
+              <div class="animate-spin h-5 w-5 border-2 border-slate-950 border-t-transparent rounded-full"></div>
+              Finding a topic...
+            </span>
+          {:else}
+            🎲 Random Topic
+          {/if}
         </button>
+        
+        <p class="text-center text-xs text-slate-500 mt-3">
+          Pulls from Wikipedia's entire catalog of articles
+        </p>
 
         <!-- Stats -->
         {#if matchCount > 0}
@@ -391,7 +411,6 @@
     <div class="max-w-6xl mx-auto">
       <div class="text-center mb-8">
         <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/50 border border-slate-700/50">
-          <span class="text-amber-500">📚</span>
           <span class="font-medium">{currentTopic}</span>
         </div>
       </div>
@@ -418,24 +437,28 @@
       </p>
     </div>
 
-  <!-- Comparing Phase -->
+  <!-- Comparing Phase - NO SOURCE IDENTIFICATION -->
   {:else if phase === 'comparing' && leftDisplay && rightDisplay}
     <div class="space-y-6">
       <!-- Topic Badge -->
       <div class="text-center">
         <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/50 border border-slate-700/50">
-          <span class="text-amber-500">📚</span>
           <span class="font-medium">{currentTopic}</span>
         </div>
+        <p class="text-xs text-slate-500 mt-2">Sources are hidden until you vote</p>
       </div>
 
-      <!-- Content Cards -->
+      <!-- Content Cards - BLIND COMPARISON -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- Left Source -->
-        <div class="arena-card flex flex-col">
+        <!-- Left Source (Anonymous) -->
+        <div class="arena-card flex flex-col border-2 border-blue-500/30">
           <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-700/50">
-            <span class="text-lg font-semibold text-blue-400">Source A</span>
-            <span class="text-2xl">{getEmoji(leftDisplay.source.slug)}</span>
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-lg">
+                A
+              </div>
+              <span class="text-lg font-semibold text-blue-400">Source A</span>
+            </div>
           </div>
           
           <div class="flex-1 overflow-y-auto max-h-[60vh] scrollbar-thin">
@@ -454,11 +477,15 @@
           {/if}
         </div>
 
-        <!-- Right Source -->
-        <div class="arena-card flex flex-col">
+        <!-- Right Source (Anonymous) -->
+        <div class="arena-card flex flex-col border-2 border-purple-500/30">
           <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-700/50">
-            <span class="text-lg font-semibold text-purple-400">Source B</span>
-            <span class="text-2xl">{getEmoji(rightDisplay.source.slug)}</span>
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-lg">
+                B
+              </div>
+              <span class="text-lg font-semibold text-purple-400">Source B</span>
+            </div>
           </div>
           
           <div class="flex-1 overflow-y-auto max-h-[60vh] scrollbar-thin">
@@ -519,26 +546,31 @@
       <p class="text-slate-400">Recording your vote...</p>
     </div>
 
-  <!-- Revealing/Complete Phase -->
+  <!-- Revealing/Complete Phase - SHOW SOURCE LOGOS -->
   {:else if (phase === 'revealing' || phase === 'complete') && voteResult && leftDisplay && rightDisplay}
     <div class="space-y-6">
       <!-- Topic Badge -->
       <div class="text-center">
         <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/50 border border-slate-700/50">
-          <span class="text-amber-500">📚</span>
           <span class="font-medium">{currentTopic}</span>
         </div>
       </div>
 
-      <!-- Revealed Cards -->
+      <!-- Revealed Cards with Logos -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Left Reveal -->
-        <div class="arena-card">
+        <div class="arena-card border-2 {voteResult.winner === 'a' ? 'border-green-500/50' : voteResult.winner === 'b' ? 'border-red-500/30' : 'border-slate-600/50'}">
           <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-3">
-              <span class="text-2xl">{getEmoji(voteResult.leftSource.slug)}</span>
+              <div class="w-12 h-12 rounded-lg bg-white/10 p-2 flex items-center justify-center">
+                <img 
+                  src={getLogo(voteResult.leftSource.slug)} 
+                  alt={voteResult.leftSource.name}
+                  class="max-w-full max-h-full object-contain"
+                />
+              </div>
               <div>
-                <div class="font-semibold text-lg">{voteResult.leftSource.name}</div>
+                <div class="font-semibold text-lg {getColor(voteResult.leftSource.slug)}">{voteResult.leftSource.name}</div>
                 <div class="text-sm text-slate-500">Source A</div>
               </div>
             </div>
@@ -550,15 +582,24 @@
             Rating: {Math.round(voteResult.leftSource.rating)} → 
             <span class="font-semibold text-slate-200">{Math.round(voteResult.leftNewRating)}</span>
           </div>
+          {#if voteResult.winner === 'a'}
+            <div class="mt-3 text-sm text-green-400 font-medium">✓ Your pick</div>
+          {/if}
         </div>
 
         <!-- Right Reveal -->
-        <div class="arena-card">
+        <div class="arena-card border-2 {voteResult.winner === 'b' ? 'border-green-500/50' : voteResult.winner === 'a' ? 'border-red-500/30' : 'border-slate-600/50'}">
           <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-3">
-              <span class="text-2xl">{getEmoji(voteResult.rightSource.slug)}</span>
+              <div class="w-12 h-12 rounded-lg bg-white/10 p-2 flex items-center justify-center">
+                <img 
+                  src={getLogo(voteResult.rightSource.slug)} 
+                  alt={voteResult.rightSource.name}
+                  class="max-w-full max-h-full object-contain"
+                />
+              </div>
               <div>
-                <div class="font-semibold text-lg">{voteResult.rightSource.name}</div>
+                <div class="font-semibold text-lg {getColor(voteResult.rightSource.slug)}">{voteResult.rightSource.name}</div>
                 <div class="text-sm text-slate-500">Source B</div>
               </div>
             </div>
@@ -570,6 +611,9 @@
             Rating: {Math.round(voteResult.rightSource.rating)} → 
             <span class="font-semibold text-slate-200">{Math.round(voteResult.rightNewRating)}</span>
           </div>
+          {#if voteResult.winner === 'b'}
+            <div class="mt-3 text-sm text-green-400 font-medium">✓ Your pick</div>
+          {/if}
         </div>
       </div>
 
