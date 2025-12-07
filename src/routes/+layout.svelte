@@ -1,13 +1,24 @@
 <script lang="ts">
   import '../app.css';
   import { page } from '$app/stores';
+  import { onMount } from 'svelte';
+  import { isSupabaseConfigured } from '$lib/services/supabase';
+  import { userStore } from '$lib/stores/user';
+  
+  let mounted = false;
   
   const navItems = [
     { href: '/', label: 'Home', icon: '🏠' },
     { href: '/arena', label: 'Arena', icon: '⚔️' },
     { href: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
     { href: '/blend', label: 'Blender', icon: '🧪' },
+    { href: '/preferences', label: 'Preferences', icon: '📊' },
   ];
+  
+  onMount(() => {
+    mounted = true;
+    userStore.init();
+  });
 </script>
 
 <div class="min-h-screen bg-slate-950 text-slate-100">
@@ -49,6 +60,16 @@
           </svg>
         </button>
       </div>
+      
+      <!-- Connection Status Banner -->
+      {#if mounted && !isSupabaseConfigured}
+        <div class="bg-amber-500/10 border-t border-amber-500/20 px-4 py-2">
+          <p class="text-xs text-amber-400 text-center">
+            ⚠️ Database not connected. Create a <code class="bg-slate-800 px-1 rounded">.env</code> file with your Supabase credentials.
+            <a href="https://supabase.com/dashboard" target="_blank" class="underline hover:text-amber-300">Get credentials →</a>
+          </p>
+        </div>
+      {/if}
     </div>
   </nav>
 

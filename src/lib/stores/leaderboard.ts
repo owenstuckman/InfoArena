@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
-import { getSupabase } from '$lib/services/supabase';
+import { getSupabase, isSupabaseConfigured } from '$lib/services/supabase';
+import { getDemoLeaderboard } from '$lib/services/demo';
 import type { LeaderboardEntry, Source } from '$lib/types/database';
 
 interface LeaderboardState {
@@ -39,6 +40,18 @@ function createLeaderboardStore() {
       update(s => ({ ...s, loading: true, error: null }));
 
       try {
+        // Use demo data if Supabase not configured
+        if (!isSupabaseConfigured) {
+          await new Promise(resolve => setTimeout(resolve, 300)); // Simulate delay
+          update(s => ({
+            ...s,
+            entries: getDemoLeaderboard(),
+            loading: false,
+            lastUpdated: new Date(),
+          }));
+          return;
+        }
+
         const supabase = getSupabase();
 
         // Use the database function for leaderboard
@@ -68,6 +81,8 @@ function createLeaderboardStore() {
      * Subscribe to real-time leaderboard updates
      */
     subscribeRealtime() {
+      if (!isSupabaseConfigured) return;
+      
       const supabase = getSupabase();
 
       // Clean up existing subscription
@@ -167,6 +182,10 @@ export const isLeaderboardLoading = derived(
  * Get head-to-head statistics between two sources
  */
 export async function getHeadToHead(sourceAId: string, sourceBId: string) {
+  if (!isSupabaseConfigured) {
+    return { winsA: 0, winsB: 0, ties: 0, total: 0 };
+  }
+  
   const supabase = getSupabase();
 
   const { data: matches, error } = await supabase

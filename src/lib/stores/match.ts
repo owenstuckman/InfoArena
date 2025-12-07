@@ -1,6 +1,13 @@
 import { writable, derived, get } from 'svelte/store';
-import { getSupabase, getSessionId } from '$lib/services/supabase';
+import { getSupabase, getSessionId, isSupabaseConfigured } from '$lib/services/supabase';
 import { calculateMatchOutcome, createRating } from '$lib/services/glicko2';
+import { getWikipediaContent } from '$lib/services/wikipedia';
+import { 
+  DEMO_SOURCES, 
+  getRandomDemoTopic, 
+  getDemoContent, 
+  simulateDemoVote 
+} from '$lib/services/demo';
 import type { ArenaMatch, VoteResult, Source, VoteWinner } from '$lib/types/database';
 
 // Match phases
@@ -37,6 +44,13 @@ function createMatchStore() {
       update(s => ({ ...s, phase: 'loading', error: null, voteResult: null }));
 
       try {
+        // Check if Supabase is configured
+        if (!isSupabaseConfigured) {
+          // Use demo mode
+          await this.loadDemoMatch();
+          return;
+        }
+
         const supabase = getSupabase();
 
         // Get active sources
@@ -136,6 +150,12 @@ function createMatchStore() {
     async submitVote(winner: VoteWinner) {
       const state = get({ subscribe });
       if (!state.currentMatch || state.phase !== 'comparing') return;
+
+      // Use demo mode if Supabase not configured
+      if (!isSupabaseConfigured) {
+        await this.submitDemoVote(winner);
+        return;
+      }
 
       update(s => ({ ...s, phase: 'voting' }));
 
@@ -322,6 +342,122 @@ function createMatchStore() {
      */
     clearError() {
       update(s => ({ ...s, error: null }));
+    },
+
+    /**
+     * Load a demo match (no Supabase required)
+     */
+    async loadDemoMatch() {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const topic = getRandomDemoTopic();
+      const [sourceA, sourceB] = [...DEMO_SOURCES].sort(() => Math.random() - 0.5);
+      const sourceAPosition = Math.random() > 0.5 ? 1 : 2;
+
+      // Try to get Wikipedia content, fall back to demo content
+      let contentA: string;
+      let contentB: string;
+
+      try {
+        contentA = await getWikipediaContent(topic.title);
+      } catch {
+        contentA = getDemoContent(topic.slug, sourceA.slug);
+      }
+      
+      contentB = getDemoContent(topic.slug, sourceB.slug);
+
+      const arenaMatch: ArenaMatch = {
+        id: `demo-${Date.now()}`,
+        topic: topic.title,
+        leftContent: sourceAPosition === 1 ? contentA : contentB,
+        rightContent: sourceAPosition === 1 ? contentB : contentA,
+        sourceAPosition,
+        sourceA,
+        sourceB,
+      };
+
+      update(s => ({
+        ...s,
+        currentMatch: arenaMatch,
+        phase: 'comparing',
+        voteStartTime: Date.now(),
+      }));
+    },
+
+    /**
+     * Submit a demo vote (no Supabase required)
+     */
+    async submitDemoVote(winner: VoteWinner) {
+      const state = get({ subscribe });
+      if (!state.currentMatch) return;
+
+      update(s => ({ ...s, phase: 'voting' }));
+
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const match = state.currentMatch;
+      const sourceA = match.sourceA!;
+      const sourceB = match.sourceB!;
+
+      // Determine actual winner based on position
+      let actualWinner: 'a' | 'b' | 'tie' = winner === 'both_bad' ? 'tie' : winner as 'a' | 'b' | 'tie';
+      if (winner === 'a' || winner === 'b') {
+        if (match.sourceAPosition === 1) {
+          actualWinner = winner;
+        } else {
+          actualWinner = winner === 'a' ? 'b' : 'a';
+        }
+      }
+
+      // Simulate rating changes
+      const result = simulateDemoVote(sourceA, sourceB, actualWinner);
+
+      const voteResult: VoteResult = {
+        vote: {
+          id: `demo-vote-${Date.now()}`,
+          match_id: match.id,
+          user_id: null,
+          session_id: 'demo-session',
+          winner: winner,
+          source_a_rating_before: sourceA.rating,
+          source_a_rating_after: result.sourceA.rating,
+          source_b_rating_before: sourceB.rating,
+          source_b_rating_after: result.sourceB.rating,
+          time_to_vote_ms: state.voteStartTime ? Date.now() - state.voteStartTime : null,
+          device_type: null,
+          metadata: {},
+          created_at: new Date().toISOString(),
+        },
+        ratings: {
+          sourceA: {
+            before: sourceA.rating,
+            after: result.sourceA.rating,
+            change: result.changeA,
+          },
+          sourceB: {
+            before: sourceB.rating,
+            after: result.sourceB.rating,
+            change: result.changeB,
+          },
+        },
+        reveal: {
+          sourceA,
+          sourceB,
+        },
+      };
+
+      update(s => ({
+        ...s,
+        phase: 'revealing',
+        voteResult,
+        matchCount: s.matchCount + 1,
+      }));
+
+      setTimeout(() => {
+        update(s => ({ ...s, phase: 'complete' }));
+      }, 2000);
     },
   };
 }
