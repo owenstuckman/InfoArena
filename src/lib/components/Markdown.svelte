@@ -42,6 +42,25 @@
   
   // Pre-process content to fix common markdown table issues
   function preprocessMarkdown(text: string): string {
+    // First, handle tables that are all on one line with || as row separators
+    // Pattern: | A | B | || C | D | || E | F |
+    // This means || is being used as a row delimiter
+    text = text.replace(/\|\s*\|\s*\|/g, '||\n|'); // "| || " -> "||\n|"
+    text = text.replace(/\|\s*\|\|/g, '|\n|'); // "| ||" at end of pattern -> "|\n|"
+    
+    // More aggressive: if we see | content | content | || | content, split it
+    // Look for pattern: | ... | || | ... | (where || separates rows)
+    text = text.replace(/\|\s*\|\|\s*\|/g, '|\n|');
+    
+    // Handle the specific pattern: "| || ---" which indicates row separator followed by header separator
+    text = text.replace(/\|\s*\|\|\s*---/g, '|\n| ---');
+    
+    // Also handle: "Party | ||" -> "Party |\n|"
+    text = text.replace(/([^|])\s*\|\s*\|\|/g, '$1 |\n|');
+    
+    // And: "|| 1957" -> "\n| 1957"
+    text = text.replace(/\|\|\s*([^|\s-])/g, '|\n| $1');
+    
     const lines = text.split('\n');
     const result: string[] = [];
     let inTable = false;
@@ -119,22 +138,35 @@
   
   // Count cells in a table line
   function countCells(line: string): number {
-    // Count pipes and subtract 1 (for the outer pipes)
-    const pipes = (line.match(/\|/g) || []).length;
-    return Math.max(1, pipes - 1);
+    // Remove leading/trailing pipes and count remaining pipes + 1
+    let trimmed = line.trim();
+    if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+    if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+    
+    // Split by | and count non-empty segments
+    const cells = trimmed.split('|');
+    return Math.max(1, cells.length);
   }
   
   // Normalize a table line to proper markdown format
   function normalizeTableLine(line: string): string {
     let normalized = line.trim();
     
-    // Replace multiple consecutive pipes with single pipe + empty cells
-    // ||  -> | |
-    // ||| -> | | |
-    normalized = normalized.replace(/\|\|+/g, (match) => {
-      const extraPipes = match.length - 1;
-      return '|' + ' |'.repeat(extraPipes);
-    });
+    // First, handle double/triple pipes that indicate empty cells or row breaks
+    // But be careful: || at end of line might be row separator already handled
+    
+    // Replace ||| with | | | (two empty cells)
+    normalized = normalized.replace(/\|\|\|/g, '| | |');
+    
+    // Replace || with | | (one empty cell) - but not at start/end
+    // Do this carefully to avoid breaking things
+    let prev = '';
+    while (prev !== normalized) {
+      prev = normalized;
+      normalized = normalized.replace(/\|([^|])\|{2}([^|])/g, '|$1| |$2');
+      normalized = normalized.replace(/\|\|([^|])/g, '| |$1');
+      normalized = normalized.replace(/([^|])\|\|/g, '$1| |');
+    }
     
     // Ensure line starts with |
     if (!normalized.startsWith('|')) {
@@ -150,7 +182,7 @@
     normalized = normalized.replace(/\|([^\s|])/g, '| $1');
     normalized = normalized.replace(/([^\s|])\|/g, '$1 |');
     
-    // Handle empty cells properly
+    // Handle empty cells properly - ensure at least a space
     normalized = normalized.replace(/\|\s*\|/g, '| |');
     
     return normalized;

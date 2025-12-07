@@ -787,7 +787,16 @@ function parseGrokipediaHtml(html: string, topic: string): string {
   content = content.replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '*$1*');
   content = content.replace(/<i[^>]*>([\s\S]*?)<\/i>/gi, '*$1*');
   
-  // Convert links (keep them)
+  // Convert links - handle both absolute and relative URLs
+  // First, convert relative Grokipedia links to absolute
+  content = content.replace(/<a[^>]*href="\/page\/([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, 
+    '[$2](https://grokipedia.com/page/$1)');
+  // Then convert other relative links
+  content = content.replace(/<a[^>]*href="\/([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, 
+    '[$2](https://grokipedia.com/$1)');
+  // Finally convert absolute links
+  content = content.replace(/<a[^>]*href="(https?:\/\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)');
+  // Handle any remaining links with href
   content = content.replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)');
   
   // Convert line breaks
@@ -848,8 +857,10 @@ For those interested in learning more, there are numerous resources available in
 }
 
 // ============================================
-// ENCYCLOPEDIA BRITANNICA
+// ENCYCLOPEDIA BRITANNICA (Scraping from britannica.com)
 // ============================================
+
+const BRITANNICA_BASE_URL = 'https://www.britannica.com';
 
 export interface BritannicaArticle {
   title: string;
@@ -859,9 +870,231 @@ export interface BritannicaArticle {
 }
 
 /**
- * Fetch Encyclopedia Britannica content
+ * Fetch Encyclopedia Britannica content by scraping britannica.com
  */
 export async function fetchBritannicaContent(topic: string): Promise<BritannicaArticle | null> {
+  try {
+    // First, search for the topic to get the article URL
+    const searchUrl = `${BRITANNICA_BASE_URL}/search?query=${encodeURIComponent(topic)}`;
+    
+    const searchResponse = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'WikiArena/1.0 (Knowledge Comparison Platform)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    if (!searchResponse.ok) {
+      console.error('Britannica search error:', searchResponse.status);
+      return generateBritannicaFallback(topic);
+    }
+
+    const searchHtml = await searchResponse.text();
+    
+    // Find the first article link from search results
+    const articleUrlMatch = searchHtml.match(/<a[^>]*href="(\/[^"]*\/[^"]+)"[^>]*class="[^"]*md-crosslink[^"]*"[^>]*>/i) ||
+                           searchHtml.match(/<a[^>]*class="[^"]*md-crosslink[^"]*"[^>]*href="(\/[^"]*\/[^"]+)"[^>]*>/i) ||
+                           searchHtml.match(/href="(\/topic\/[^"]+)"/i) ||
+                           searchHtml.match(/href="(\/biography\/[^"]+)"/i) ||
+                           searchHtml.match(/href="(\/place\/[^"]+)"/i) ||
+                           searchHtml.match(/href="(\/science\/[^"]+)"/i) ||
+                           searchHtml.match(/href="(\/technology\/[^"]+)"/i) ||
+                           searchHtml.match(/href="(\/animal\/[^"]+)"/i) ||
+                           searchHtml.match(/href="(\/plant\/[^"]+)"/i) ||
+                           searchHtml.match(/href="(\/event\/[^"]+)"/i) ||
+                           searchHtml.match(/href="(\/art\/[^"]+)"/i);
+    
+    if (!articleUrlMatch) {
+      // Try direct URL patterns
+      return await tryDirectBritannicaUrls(topic);
+    }
+
+    const articleUrl = `${BRITANNICA_BASE_URL}${articleUrlMatch[1]}`;
+    
+    // Fetch the actual article
+    const articleResponse = await fetch(articleUrl, {
+      headers: {
+        'User-Agent': 'WikiArena/1.0 (Knowledge Comparison Platform)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    if (!articleResponse.ok) {
+      return generateBritannicaFallback(topic);
+    }
+
+    const articleHtml = await articleResponse.text();
+    const content = parseBritannicaHtml(articleHtml, topic);
+    
+    if (content && content.length > 200) {
+      return {
+        title: topic,
+        content: sanitizeContent(content, 'britannica'),
+        source: 'britannica',
+        url: articleUrl,
+      };
+    }
+    
+    return generateBritannicaFallback(topic);
+  } catch (e) {
+    console.error('Britannica error:', e);
+    return generateBritannicaFallback(topic);
+  }
+}
+
+/**
+ * Try direct URL patterns for Britannica articles
+ */
+async function tryDirectBritannicaUrls(topic: string): Promise<BritannicaArticle | null> {
+  const formattedTopic = topic.toLowerCase().replace(/\s+/g, '-');
+  const categories = ['topic', 'biography', 'place', 'science', 'technology', 'animal', 'plant', 'event', 'art'];
+  
+  for (const category of categories) {
+    try {
+      const url = `${BRITANNICA_BASE_URL}/${category}/${formattedTopic}`;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'WikiArena/1.0 (Knowledge Comparison Platform)',
+        },
+      });
+      
+      if (response.ok) {
+        const html = await response.text();
+        const content = parseBritannicaHtml(html, topic);
+        
+        if (content && content.length > 200) {
+          return {
+            title: topic,
+            content: sanitizeContent(content, 'britannica'),
+            source: 'britannica',
+            url: url,
+          };
+        }
+      }
+    } catch (e) {
+      // Continue to next category
+    }
+  }
+  
+  return generateBritannicaFallback(topic);
+}
+
+/**
+ * Parse HTML from Britannica page and extract content as markdown
+ */
+function parseBritannicaHtml(html: string, topic: string): string {
+  let content = '';
+  
+  // Try to find the main article content
+  // Britannica uses various content containers
+  const contentPatterns = [
+    /<div[^>]*class="[^"]*topic-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<article[^>]*>([\s\S]*?)<\/article>/i,
+    /<div[^>]*class="[^"]*md-article-container[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<section[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/section>/i,
+    /<div[^>]*id="ref\d+"[^>]*>([\s\S]*?)<\/div>/gi,
+  ];
+  
+  for (const pattern of contentPatterns) {
+    const match = html.match(pattern);
+    if (match && match[1] && match[1].length > 300) {
+      content = match[1];
+      break;
+    }
+  }
+  
+  // Also try to get all paragraph content
+  if (!content || content.length < 300) {
+    const paragraphs: string[] = [];
+    const pMatch = html.matchAll(/<p[^>]*class="[^"]*topic-paragraph[^"]*"[^>]*>([\s\S]*?)<\/p>/gi);
+    for (const m of pMatch) {
+      if (m[1]) paragraphs.push(m[1]);
+    }
+    if (paragraphs.length > 0) {
+      content = paragraphs.join('\n\n');
+    }
+  }
+  
+  // Fallback: get body content
+  if (!content || content.length < 300) {
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    if (bodyMatch) {
+      content = bodyMatch[1];
+    }
+  }
+  
+  if (!content) return '';
+  
+  // Convert HTML to markdown
+  let markdown = `# ${topic}\n\n`;
+  
+  // Remove unwanted elements
+  content = content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+  content = content.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+  content = content.replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '');
+  content = content.replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '');
+  content = content.replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '');
+  content = content.replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '');
+  content = content.replace(/<figure[^>]*>[\s\S]*?<\/figure>/gi, '');
+  content = content.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+  content = content.replace(/<!--[\s\S]*?-->/gi, '');
+  
+  // Convert headings
+  content = content.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, '\n# $1\n');
+  content = content.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '\n## $1\n');
+  content = content.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, '\n### $1\n');
+  content = content.replace(/<h4[^>]*>([\s\S]*?)<\/h4>/gi, '\n#### $1\n');
+  
+  // Convert paragraphs
+  content = content.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '\n$1\n');
+  
+  // Convert lists
+  content = content.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '\n- $1');
+  content = content.replace(/<\/?[uo]l[^>]*>/gi, '\n');
+  
+  // Convert bold and italic
+  content = content.replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**');
+  content = content.replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, '**$1**');
+  content = content.replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '*$1*');
+  content = content.replace(/<i[^>]*>([\s\S]*?)<\/i>/gi, '*$1*');
+  
+  // Convert Britannica internal links to absolute URLs
+  content = content.replace(/<a[^>]*href="\/([^"#]+)"[^>]*>([\s\S]*?)<\/a>/gi, 
+    `[$2](${BRITANNICA_BASE_URL}/$1)`);
+  // Convert external links
+  content = content.replace(/<a[^>]*href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)');
+  
+  // Convert line breaks
+  content = content.replace(/<br\s*\/?>/gi, '\n');
+  
+  // Remove remaining HTML tags
+  content = content.replace(/<[^>]+>/g, '');
+  
+  // Decode HTML entities
+  content = decodeHtmlEntities(content);
+  
+  // Clean up whitespace
+  content = content.replace(/\n{3,}/g, '\n\n');
+  content = content.replace(/^\s+|\s+$/gm, '');
+  content = content.trim();
+  
+  // Don't include the title again if it's at the start
+  const topicLower = topic.toLowerCase();
+  const contentLower = content.toLowerCase();
+  if (contentLower.startsWith(topicLower) || contentLower.startsWith(`# ${topicLower}`)) {
+    const firstNewline = content.indexOf('\n');
+    if (firstNewline > 0 && firstNewline < topic.length + 30) {
+      content = content.substring(firstNewline).trim();
+    }
+  }
+  
+  return markdown + content;
+}
+
+/**
+ * Generate fallback content when Britannica is unavailable
+ */
+function generateBritannicaFallback(topic: string): BritannicaArticle {
   return {
     title: topic,
     content: sanitizeContent(generateBritannicaDemoContent(topic), 'britannica'),
@@ -909,7 +1142,73 @@ The practical applications and implications of ${topic} extend across various do
 - **Technology** - Innovations inspired by this knowledge
 - **Society** - Broader cultural and social implications
 
-Understanding these connections helps illuminate the broader significance of this subject in both historical and contemporary contexts.`;
+Understanding these connections helps illuminate the broader significance of this subject in both historical and contemporary contexts.
+
+---
+
+*Note: This is placeholder content. The full Britannica article may be available at [britannica.com](https://www.britannica.com/search?query=${encodeURIComponent(topic)}).*`;
+}
+
+// ============================================
+// MEDIAWIKI HTML TO MARKDOWN CONVERTER
+// ============================================
+
+/**
+ * Convert MediaWiki HTML extract to Markdown with proper links
+ */
+function convertMediaWikiHtmlToMarkdown(title: string, html: string, baseUrl: string): string {
+  let content = html;
+  
+  // Remove edit section links
+  content = content.replace(/<span class="mw-editsection"[^>]*>[\s\S]*?<\/span>/gi, '');
+  
+  // Convert wiki links to absolute URLs
+  // Pattern: href="/wiki/Article_Name" or href="/entry/Article_Name"
+  content = content.replace(/<a[^>]*href="\/wiki\/([^"#]+)"[^>]*>([^<]*)<\/a>/gi, 
+    `[$2](${baseUrl}/wiki/$1)`);
+  content = content.replace(/<a[^>]*href="\/entry\/([^"#]+)"[^>]*>([^<]*)<\/a>/gi, 
+    `[$2](${baseUrl}/entry/$1)`);
+  
+  // Convert external links
+  content = content.replace(/<a[^>]*href="(https?:\/\/[^"]+)"[^>]*>([^<]*)<\/a>/gi, '[$2]($1)');
+  
+  // Handle any remaining relative links
+  content = content.replace(/<a[^>]*href="\/([^"#]+)"[^>]*>([^<]*)<\/a>/gi, 
+    `[$2](${baseUrl}/$1)`);
+  
+  // Convert headings
+  content = content.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '\n## $1\n');
+  content = content.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, '\n### $1\n');
+  content = content.replace(/<h4[^>]*>([\s\S]*?)<\/h4>/gi, '\n#### $1\n');
+  
+  // Convert paragraphs
+  content = content.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '\n$1\n');
+  
+  // Convert lists
+  content = content.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '\n- $1');
+  content = content.replace(/<\/?[uo]l[^>]*>/gi, '\n');
+  
+  // Convert bold and italic
+  content = content.replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**');
+  content = content.replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, '**$1**');
+  content = content.replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '*$1*');
+  content = content.replace(/<i[^>]*>([\s\S]*?)<\/i>/gi, '*$1*');
+  
+  // Convert line breaks
+  content = content.replace(/<br\s*\/?>/gi, '\n');
+  
+  // Remove remaining HTML tags
+  content = content.replace(/<[^>]+>/g, '');
+  
+  // Decode HTML entities
+  content = decodeHtmlEntities(content);
+  
+  // Clean up whitespace
+  content = content.replace(/\n{3,}/g, '\n\n');
+  content = content.replace(/^\s+|\s+$/gm, '');
+  content = content.trim();
+  
+  return `# ${title}\n\n${content}`;
 }
 
 // ============================================
@@ -936,7 +1235,7 @@ export async function fetchCitizendiumContent(topic: string): Promise<Citizendiu
       titles: topic,
       prop: 'extracts|info',
       exintro: '0',
-      explaintext: '1',
+      explaintext: '0', // Get HTML to preserve links
       exsectionformat: 'wiki',
       inprop: 'url',
       format: 'json',
@@ -965,8 +1264,9 @@ export async function fetchCitizendiumContent(topic: string): Promise<Citizendiu
       return await searchCitizendium(topic);
     }
     
-    const formattedContent = formatMediaWikiContent(page.title, page.extract);
-    const sanitizedContent = sanitizeContent(formattedContent, 'citizendium');
+    // Convert HTML to markdown, including links
+    const markdownContent = convertMediaWikiHtmlToMarkdown(page.title, page.extract, 'https://citizendium.org');
+    const sanitizedContent = sanitizeContent(markdownContent, 'citizendium');
     
     return {
       title: page.title,
@@ -1078,7 +1378,7 @@ export async function fetchNewWorldContent(topic: string): Promise<NewWorldArtic
       titles: topic,
       prop: 'extracts|info',
       exintro: '0',
-      explaintext: '1',
+      explaintext: '0', // Get HTML to preserve links
       exsectionformat: 'wiki',
       inprop: 'url',
       format: 'json',
@@ -1107,8 +1407,9 @@ export async function fetchNewWorldContent(topic: string): Promise<NewWorldArtic
       return await searchNewWorld(topic);
     }
     
-    const formattedContent = formatMediaWikiContent(page.title, page.extract);
-    const sanitizedContent = sanitizeContent(formattedContent, 'newworld');
+    // Convert HTML to markdown, including links
+    const markdownContent = convertMediaWikiHtmlToMarkdown(page.title, page.extract, 'https://www.newworldencyclopedia.org');
+    const sanitizedContent = sanitizeContent(markdownContent, 'newworld');
     
     return {
       title: page.title,
