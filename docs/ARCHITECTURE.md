@@ -1,3 +1,6 @@
+
+Original doc from claude when designing.
+
 # Knowledge Arena - Technical Architecture
 
 ## System Overview
